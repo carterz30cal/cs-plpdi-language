@@ -3,14 +3,14 @@ expressions bind in definition order and evaluate left to right
 <NUM> : an integer or floating point number
 <VAR> : program-defined variable, immutable if not a local variable in the defining scope
 <LITERAL> ::= true | false | <STR> | <NUM>
-<VALUE> ::= <LITERAL> | <VAR> | <CALL>
+<VALUE> ::= <LITERAL> | <IDENTIFIER> | <CALL> | <IDENTIFIER>(<EXPRESSIBLELIST>)
 <IDENTIFIER> ::= <STR>
 <IDENTIFIERS> ::= <IDENTIFIER> | <IDENTIFIER> <IDENTIFIERS>
 <ARITHMETIC> ::= (<ARITHMETIC>) | <VALUE> | <ARITHMETIC> ^ <ARITHMETIC> |<ARITHMETIC> / <ARITHMETIC> | <ARITHMETIC> * <ARITHMETIC> |<ARITHMETIC> + <ARITHMETIC> | <ARITHMETIC> - <ARITHMETIC>
 
 <BASETYPE> ::= num | str | boolean | any
 <TYPELIST> ::= <TYPE> | <TYPE>,<TYPELIST>
-<TYPE> ::= <BASETYPE> | <IDENTIFIER> | IDENTIFIER[<TYPELIST>]
+<TYPE> ::= <BASETYPE> | <IDENTIFIER> | <IDENTIFIER>[<TYPELIST>]
 <TRUTH> ::= true | false | 
             !<TRUTH> |
             <ARITHMETIC> < <ARITHMETIC> | 
@@ -22,6 +22,8 @@ expressions bind in definition order and evaluate left to right
 
 allows for variables, values, calls and expressions (arithmetic or boolean)
 inhale is an unsafe IO operation which takes in an input value from an external source
+if the identifier is a nullary constructor value, construct the value! (should be obvious as per naming-schemes constructors should start with a capital letter)
+<EXPRESSIBLELIST> ::= <EXPRESSIBLE> | <EXPRESSIBLE>,<EXPRESSIBLELIST>
 <EXPRESSIBLE> ::= <VALUE> | <ARITHMETIC> | <TRUTH> | inhale <STR>
 
 definitions define a variable in the local scope, these are mutable explicitly within their local scope, and become immutable within child scopes.
@@ -41,15 +43,15 @@ emit returns nothing (undefined behaviour if read)
 <IO> ::= emit <STR> <EXPRESSIBLE>
 empty expression can be treated as pass
 assignment 
-<EXPRESSION> ::= pass | <EXPRESSION>;<EXPRESSION> | {<EXPRESSION>} | <DEFINITION> | <FUNCTION> | <IO> | <CONDITION> | <REPETITION> | <VAR> = <EXPRESSIBLE> | <TYPEDEF>
+<EXPRESSION> ::= pass | <EXPRESSION>; | <EXPRESSION>;<EXPRESSION> | {<EXPRESSION>} | <DEFINITION> | <FUNCTION> | <IO> | <CONDITION> | <REPETITION> | <VAR> = <EXPRESSIBLE> | <TYPEDEF>
 
 
 <PATTERN> ::= _ | <IDENTIFIER> | <LITERAL> | <IDENTIFIER>(<PATTERNLIST>)
 <PATTERNLIST> ::= <PATTERN> | <PATTERN>,<PATTERNLIST>
 <PARAS> ::= <PATTERN> | <PATTERN> <PARAS>
-if a PV is a value or _ then we're in a pattern matching state of mind
-<FUNCDEF> ::= <PARAS> = {<EXPRESSION>; return <EXPRESSIBLE>;} |
-            = {<EXPRESSION>; return <EXPRESSIBLE>;} |
+<INNERFUNCDEF> ::= return <EXPRESSIBLE>; | <EXPRESSION>; return <EXPRESSIBLE>;
+<FUNCDEF> ::= <PARAS> = {<INNERFUNCDEF>} |
+            = {<INNERFUNCDEF>} |
             = <EXPRESSIBLE> |
             <PARAS> = <EXPRESSIBLE>
 <FUNCTION> ::= <TYPE> function <STR> <FUNCDEF>
@@ -62,13 +64,19 @@ for evaluation, f g x will apply g to x then apply the result to f
 
 
 examples
-any function identity x = x
-num function increment x = x + 1
-num function double_and_add_one x = {let num y = x * 2; return y + 1;}
+any function identity x = x;
+num function increment x = x + 1;
+num function double_and_add_one x = {let num y = x * 2; return y + 1;};
 
-type list t = Empty or Cons (t, list[t])
-boolean function isempty Empty = true
-boolean function isempty _ = false
+type list t = Empty or Cons (t, list[t]);
+boolean function isempty Empty = true;
+boolean function isempty _ = false;
 
-num function recursive_factorial 1 = 1
-num function recursive_factorial x = x * recursive_factorial (x - 1)
+`note that the matching happens in definition order, otherwise this wouldn't play very nicely and i would cry`
+num function recursive_factorial 0 = 1;
+num function recursive_factorial 1 = 1;
+num function recursive_factorial x = x * recursive_factorial (x - 1);
+
+any function head Cons(x,_) = x;
+list[any] function tail Cons(_,xs) = xs;
+list[num] function ones = Cons(1, ones)
