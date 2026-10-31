@@ -1,0 +1,1 @@
+the syntax was hand-written. i used ai as a debugging tool to point out mistakes that i made that may have not been immediately obvious to myself.
