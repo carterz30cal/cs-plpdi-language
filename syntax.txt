@@ -13,6 +13,8 @@ expressions bind in definition order and evaluate left to right
 <TYPE> ::= <BASETYPE> | <IDENTIFIER> | <IDENTIFIER>[<TYPELIST>]
 <TRUTH> ::= true | false | 
             !<TRUTH> |
+            <TRUTH> && <TRUTH> |
+            <TRUTH> || <TRUTH> |
             <ARITHMETIC> < <ARITHMETIC> | 
             <ARITHMETIC> > <ARITHMETIC> |
             <ARITHMETIC> <= <ARITHMETIC> |
