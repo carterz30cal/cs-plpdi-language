@@ -3,35 +3,6 @@ a small interpreted language that aims to achieve some of the flexibility and ni
 scope is determined using calls and curly brackets
 
 ## syntax
-expressions are evaluated in definition order, then left to right 
-<STR> : list of characters
-<NUM> : an integer or floating point number
-<VAR> : program-defined variable, immutable if not a local variable in the defining scope
-<VALUE> ::= <NUM> | <VAR> | <CALL>
-<ARITHMETIC> ::= (<ARITHMETIC>) | <VALUE> | <ARITHMETIC> ^ <ARITHMETIC> |<ARITHMETIC> / <ARITHMETIC> | <ARITHMETIC> * <ARITHMETIC> |<ARITHMETIC> + <ARITHMETIC> | <ARITHMETIC> - <ARITHMETIC>
-<BOOL> ::= true | false | 
-            !<BOOL> |
-            <ARITHMETIC> < <ARITHMETIC> | 
-            <ARITHMETIC> > <ARITHMETIC> |
-            <ARITHMETIC> <= <ARITHMETIC> |
-            <ARITHMETIC> >= <ARITHMETIC> |
-            <ARITHMETIC> == <ARITHMETIC> | 
-            <ARITHMETIC> != <ARITHMETIC> | 
-
-definitions define a variable in the local scope, these are mutable explicitly within their local scope, and become immutable within child scopes.
-<DEFINITION> ::= let <STR> | let <STR> = <VALUE>
-
-
-<REPETITION> ::= while (<BOOL>) {<EXPRESSION>} | for (<DEFINITION>, <BOOL>, <EXPRESSION>) {<EXPRESSION>}
-
-<CONDITION> ::= if (<BOOL>) {<EXPRESSION>} | if (<BOOL>) {<EXPRESSION>} else {<EXPRESSION>} | if (<BOOL>) {<EXPRESSION>} else <CONDITION>
-io is non-blocking, inhale will get the last value given to the program. breaks the immutability but i think it's fine
-<IO> ::= emit <STR> <VALUE> | inhale <STR>
-<EXPRESSION> ::= pass | <EXPRESSION>;<EXPRESSION> | {<EXPRESSION>} | <DEFINITION> | <FUNCTION> | <IO> | <CONDITION>
-
-
-<PARAS> ::= <STR> <PARAS> | <STR>
-<FUNCTION> ::= <STR> <PARAS> = {} | <STR> = {}
-<CALL> ::= <STR> <PARAS> | <STR>
+see syntax.txt
             
 
