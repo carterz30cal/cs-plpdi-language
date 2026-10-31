@@ -1,4 +1,4 @@
-expressions are evaluated in definition order, then left to right 
+expressions bind in definition order and evaluate left to right
 <STR> : list of characters
 <NUM> : an integer or floating point number
 <VAR> : program-defined variable, immutable if not a local variable in the defining scope
@@ -11,20 +11,37 @@ expressions are evaluated in definition order, then left to right
             <ARITHMETIC> <= <ARITHMETIC> |
             <ARITHMETIC> >= <ARITHMETIC> |
             <ARITHMETIC> == <ARITHMETIC> | 
-            <ARITHMETIC> != <ARITHMETIC> | 
+            <ARITHMETIC> != <ARITHMETIC> 
+
+allows for variables, values, calls and expressions (arithmetic or boolean)
+inhale is an unsafe IO operation which takes in an input value from an external source
+<EXPRESSIBLE> ::= <VALUE> | <ARITHMETIC> | <BOOL> | inhale <STR>
 
 definitions define a variable in the local scope, these are mutable explicitly within their local scope, and become immutable within child scopes.
-<DEFINITION> ::= let <STR> | let <STR> = <VALUE>
+<DEFINITION> ::= let <STR> | let <STR> = <EXPRESSIBLE>
 
-
+definitions inside the for brackets count as within the inner bracketed scope for mutability purposes. (so i could be updated within the loop)
 <REPETITION> ::= while (<BOOL>) {<EXPRESSION>} | for (<DEFINITION>, <BOOL>, <EXPRESSION>) {<EXPRESSION>}
 
 <CONDITION> ::= if (<BOOL>) {<EXPRESSION>} | if (<BOOL>) {<EXPRESSION>} else {<EXPRESSION>} | if (<BOOL>) {<EXPRESSION>} else <CONDITION>
 io is non-blocking, inhale will get the last value given to the program. breaks the immutability but i think it's fine
-<IO> ::= emit <STR> <VALUE> | inhale <STR>
-<EXPRESSION> ::= pass | <EXPRESSION>;<EXPRESSION> | {<EXPRESSION>} | <DEFINITION> | <FUNCTION> | <IO> | <CONDITION>
+this means io is an unsafe operation and can break determinism if not careful
+emit returns nothing (undefined behaviour if read)
+<IO> ::= emit <STR> <EXPRESSIBLE>
+empty expression can be treated as pass
+assignment 
+<EXPRESSION> ::= pass | <EXPRESSION>;<EXPRESSION> | {<EXPRESSION>} | <DEFINITION> | <FUNCTION> | <IO> | <CONDITION> | <REPETITION> | <VAR> = <EXPRESSIBLE>
 
-
-<PARAS> ::= <STR> <PARAS> | <STR>
-<FUNCTION> ::= <STR> <PARAS> = {} | <STR> = {}
-<CALL> ::= <STR> <PARAS> | <STR>
+<PV> ::= <STR> | <VALUE> | _
+<PARAS> ::= <PV> <PARAS> | <PV>
+if a PV is a value or _ then we're in a pattern matching state of mind
+<FUNCTION> ::= 
+            <STR> <PARAS> = {<EXPRESSION>; return <EXPRESSIBLE>;} 
+            | <STR> = {<EXPRESSION>; return <EXPRESSIBLE>;} 
+            | <STR> = return <EXPRESSIBLE>
+            | <STR> <PARAS> = return <EXPRESSIBLE>
+<CALL_PARAS> ::= <EXPRESSIBLE> | <EXPRESSIBLE> <CALL_PARAS>
+call is lazy, don't evaluate until read
+local variables hide function calls, if the same name is chosen
+for evaluation, f g x will apply g to x then apply the result to f
+<CALL> ::= <STR> <CALL_PARAS> | <STR>
