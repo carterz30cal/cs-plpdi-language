@@ -2,12 +2,15 @@ expressions bind in definition order and evaluate left to right
 <STR> : list of characters
 <NUM> : an integer or floating point number
 <VAR> : program-defined variable, immutable if not a local variable in the defining scope
-<VALUE> ::= <NUM> | <VAR> | <CALL>
+<LITERAL> ::= true | false | <STR> | <NUM>
+<VALUE> ::= <LITERAL> | <VAR> | <CALL>
 <IDENTIFIER> ::= <STR>
+<IDENTIFIERS> ::= <IDENTIFIER> | <IDENTIFIER> <IDENTIFIERS>
 <ARITHMETIC> ::= (<ARITHMETIC>) | <VALUE> | <ARITHMETIC> ^ <ARITHMETIC> |<ARITHMETIC> / <ARITHMETIC> | <ARITHMETIC> * <ARITHMETIC> |<ARITHMETIC> + <ARITHMETIC> | <ARITHMETIC> - <ARITHMETIC>
 
 <BASETYPE> ::= num | str | boolean | any
-<TYPE> ::= <BASETYPE> | <STR> | list[<TYPE>]
+<TYPELIST> ::= <TYPE> | <TYPE>,<TYPELIST>
+<TYPE> ::= <BASETYPE> | <IDENTIFIER> | IDENTIFIER[<TYPELIST>]
 <TRUTH> ::= true | false | 
             !<TRUTH> |
             <ARITHMETIC> < <ARITHMETIC> | 
@@ -24,9 +27,9 @@ inhale is an unsafe IO operation which takes in an input value from an external 
 definitions define a variable in the local scope, these are mutable explicitly within their local scope, and become immutable within child scopes.
 <DEFINITION> ::= let <TYPE> <STR> | let <TYPE> <STR> = <EXPRESSIBLE>
 
-<CONSTRUCTOR> ::= <TYPE> | <IDENTIFIER> | <CONSTRUCTOR> <CONSTRUCTOR>
+<CONSTRUCTOR> ::= <IDENTIFIER> (<TYPELIST>) | <IDENTIFIER>
 <CONSOPTS> ::= <CONSTRUCTOR> | <CONSTRUCTOR> or <CONSOPTS>
-<TYPEDEF> ::= type <IDENTIFIER> = <CONSOPTS>
+<TYPEDEF> ::= type <IDENTIFIER> <IDENTIFIERS> = <CONSOPTS>
 
 definitions inside the for brackets count as within the inner bracketed scope for mutability purposes. (so i could be updated within the loop)
 <REPETITION> ::= for (<DEFINITION>, <TRUTH>, <EXPRESSION>) {<EXPRESSION>}
@@ -38,16 +41,18 @@ emit returns nothing (undefined behaviour if read)
 <IO> ::= emit <STR> <EXPRESSIBLE>
 empty expression can be treated as pass
 assignment 
-<EXPRESSION> ::= pass | <EXPRESSION>;<EXPRESSION> | {<EXPRESSION>} | <DEFINITION> | <FUNCTION> | <IO> | <CONDITION> | <REPETITION> | <VAR> = <EXPRESSIBLE>
+<EXPRESSION> ::= pass | <EXPRESSION>;<EXPRESSION> | {<EXPRESSION>} | <DEFINITION> | <FUNCTION> | <IO> | <CONDITION> | <REPETITION> | <VAR> = <EXPRESSIBLE> | <TYPEDEF>
 
-<PV> ::= <STR> | <VALUE> | _
-<PARAS> ::= <PV> <PARAS> | <PV>
+
+<PATTERN> ::= _ | <IDENTIFIER> | <LITERAL> | <IDENTIFIER>(<PATTERNLIST>)
+<PATTERNLIST> ::= <PATTERN> | <PATTERN>,<PATTERNLIST>
+<PARAS> ::= <PATTERN> | <PATTERN> <PARAS>
 if a PV is a value or _ then we're in a pattern matching state of mind
-<FUNCTION> ::= 
-            function <STR> <PARAS> = {<EXPRESSION>; return <EXPRESSIBLE>;} 
-            | function <STR> = {<EXPRESSION>; return <EXPRESSIBLE>;} 
-            | function <STR> = <EXPRESSIBLE>
-            | function <STR> <PARAS> = <EXPRESSIBLE>
+<FUNCDEF> ::= <PARAS> = {<EXPRESSION>; return <EXPRESSIBLE>;} |
+            = {<EXPRESSION>; return <EXPRESSIBLE>;} |
+            = <EXPRESSIBLE> |
+            <PARAS> = <EXPRESSIBLE>
+<FUNCTION> ::= <TYPE> function <STR> <FUNCDEF>
 <CALL_PARAS> ::= <EXPRESSIBLE> | <EXPRESSIBLE> <CALL_PARAS>
 call is lazy, don't evaluate until read
 local variables hide function calls, if the same name is chosen
@@ -57,6 +62,13 @@ for evaluation, f g x will apply g to x then apply the result to f
 
 
 examples
-function identity x = x
-function increment x = x + 1
-function double_and_add_one x = {let num y = x * 2; return x + 1;}
+any function identity x = x
+num function increment x = x + 1
+num function double_and_add_one x = {let num y = x * 2; return y + 1;}
+
+type list t = Empty or Cons (t, list[t])
+boolean function isempty Empty = true
+boolean function isempty _ = false
+
+num function recursive_factorial 1 = 1
+num function recursive_factorial x = x * recursive_factorial (x - 1)

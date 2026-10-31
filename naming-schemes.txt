@@ -1,0 +1,4 @@
+variables, functions and types must be lowercase
+type constructors must start with an uppercase letter
+only iterators are permitted to be single letter undescriptive names, everything else must have a length of at least two characters
+functions may use snake case for readability, variables should generally be one word

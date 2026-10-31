@@ -3,6 +3,9 @@ a small lazyish interpreted language that aims to achieve some of the flexibilit
 
 our scope is determined using calls and curly brackets
 
+## inspo
+mostly haskell, some c#, some python
+
 ## syntax
 see syntax.txt
             
