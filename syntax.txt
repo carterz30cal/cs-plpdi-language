@@ -24,7 +24,9 @@ inhale is an unsafe IO operation which takes in an input value from an external 
 definitions define a variable in the local scope, these are mutable explicitly within their local scope, and become immutable within child scopes.
 <DEFINITION> ::= let <TYPE> <STR> | let <TYPE> <STR> = <EXPRESSIBLE>
 
-<TYPEDEF> ::= type <IDENTIFIER> = 
+<CONSTRUCTOR> ::= <TYPE> | <IDENTIFIER> | <CONSTRUCTOR> <CONSTRUCTOR>
+<CONSOPTS> ::= <CONSTRUCTOR> | <CONSTRUCTOR> or <CONSOPTS>
+<TYPEDEF> ::= type <IDENTIFIER> = <CONSOPTS>
 
 definitions inside the for brackets count as within the inner bracketed scope for mutability purposes. (so i could be updated within the loop)
 <REPETITION> ::= for (<DEFINITION>, <TRUTH>, <EXPRESSION>) {<EXPRESSION>}
