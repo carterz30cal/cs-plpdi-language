@@ -1,10 +1,10 @@
-data BaseType = Str | Boolean | Num | Any
+data BaseType = Str | Boolean | Int | Float | Any
     deriving (Eq, Show)
 
 data Type
     = Basic BaseType
     | TypeVariable String
-    | Defined String [Type]
+    | Defined Constructor
     deriving (Eq, Show)
 
 data Literal
@@ -82,6 +82,31 @@ equality (Just (ResultConstruct name1 fields1)) (Just (ResultConstruct name2 fie
             (zip fields1 fields2)
 equality Nothing Nothing _ = True
 equality _ _ _ = False
+
+literalMatch :: Literal -> Literal -> Bool
+literalMatch i j = i == j
+
+typeMatch :: Type -> Type -> Bool
+typeMatch (Basic b1) (Basic b2) = b1 == b2
+
+type :: Result -> Type
+type (ResultLiteral (IntegerLiteral _)) = Basic Int
+type (ResultLiteral (FloatLiteral _)) = Basic Float
+type (ResultLiteral (StringLiteral _)) = Basic Str
+type (ResultLiteral (BooleanLiteral _)) = Basic Boolean
+type (ResultConstruct name fields) = Defined (Con name (map type fields))
+
+cast :: Literal -> Type -> Maybe Literal
+cast (IntegerLiteral i) (Basic Int) = Just (IntegerLiteral i)
+cast (IntegerLiteral i) (Basic Float) = Just (FloatLiteral (fromIntegral i))
+cast (IntegerLiteral i) (Basic Str) = Just (StringLiteral (show i))
+cast (FloatLiteral f) (Basic Float) = Just (FloatLiteral f)
+cast (FloatLiteral f) (Basic Str) = Just (StringLiteral (show f))
+cast (StringLiteral s) (Basic Str) = Just (StringLiteral s)
+cast (BooleanLiteral b) (Basic Boolean) = Just (BooleanLiteral b)
+cast _ _ = Nothing
+
+
 
 -- A function clause has its own patterns and a final return expression.
 -- Repeated FunctionDec nodes retain source order for pattern matching.
@@ -221,7 +246,7 @@ execute (Seq (If condition thenExpr elseExpr) rest) context = do
 
 exampleContext :: Context
 exampleContext = Context
-    { variables = [("test", ((Basic Num), Literal (IntegerLiteral 3)))]
+    { variables = [("test", ((Basic Int), Literal (IntegerLiteral 3)))]
     , immutables = []
     , functions = []
     , types = []
