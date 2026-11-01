@@ -49,10 +49,10 @@ data TruthyOperation a
     | NotOp (TruthyOperation a)
     | EqualOp a a
     | NotEqualOp a a
-    | GreaterThanOp a a
-    | GreaterThanEqualOp a a
-    | LessThanOp a a
-    | LessThanEqualOp a a
+    | GreaterThanOp (ArithmeticOperation a) (ArithmeticOperation a)
+    | GreaterThanEqualOp (ArithmeticOperation a) (ArithmeticOperation a)
+    | LessThanOp (ArithmeticOperation a) (ArithmeticOperation a)
+    | LessThanEqualOp (ArithmeticOperation a) (ArithmeticOperation a)
     deriving (Show)
 
 -- Expressions produce values. A Call has a list of arguments; Construct
@@ -331,6 +331,56 @@ truth (NotEqualOp left right) context = do
     if equality l r context
         then Just (ResultLiteral (BooleanLiteral False))
         else Just (ResultLiteral (BooleanLiteral True))
+truth (AndOp left right) context = do
+    l <- truth left context
+    r <- truth right context
+    case (l, r) of
+        (ResultLiteral (BooleanLiteral lv), ResultLiteral (BooleanLiteral rv)) ->
+            Just (ResultLiteral (BooleanLiteral (lv && rv)))
+        _ -> Nothing
+truth (OrOp left right) context = do
+    l <- truth left context
+    r <- truth right context
+    case (l, r) of
+        (ResultLiteral (BooleanLiteral lv), ResultLiteral (BooleanLiteral rv)) ->
+            Just (ResultLiteral (BooleanLiteral (lv || rv)))
+        _ -> Nothing
+truth (GreaterThanOp left right) context = do
+    l <- arithmetic left context
+    r <- arithmetic right context
+    case (l, r) of
+        (ResultLiteral (IntegerLiteral lv), ResultLiteral (IntegerLiteral rv)) ->
+            Just (ResultLiteral (BooleanLiteral (lv > rv)))
+        (ResultLiteral (FloatLiteral lv), ResultLiteral (FloatLiteral rv)) ->
+            Just (ResultLiteral (BooleanLiteral (lv > rv)))
+        _ -> Nothing
+truth (GreaterThanEqualOp left right) context = do
+    l <- arithmetic left context
+    r <- arithmetic right context
+    case (l, r) of
+        (ResultLiteral (IntegerLiteral lv), ResultLiteral (IntegerLiteral rv)) ->
+            Just (ResultLiteral (BooleanLiteral (lv >= rv)))
+        (ResultLiteral (FloatLiteral lv), ResultLiteral (FloatLiteral rv)) ->
+            Just (ResultLiteral (BooleanLiteral (lv >= rv)))
+        _ -> Nothing
+truth (LessThanOp left right) context = do
+    l <- arithmetic left context
+    r <- arithmetic right context
+    case (l, r) of
+        (ResultLiteral (IntegerLiteral lv), ResultLiteral (IntegerLiteral rv)) ->
+            Just (ResultLiteral (BooleanLiteral (lv < rv)))
+        (ResultLiteral (FloatLiteral lv), ResultLiteral (FloatLiteral rv)) ->
+            Just (ResultLiteral (BooleanLiteral (lv < rv)))
+        _ -> Nothing
+truth (LessThanEqualOp left right) context = do
+    l <- arithmetic left context
+    r <- arithmetic right context
+    case (l, r) of
+        (ResultLiteral (IntegerLiteral lv), ResultLiteral (IntegerLiteral rv)) ->
+            Just (ResultLiteral (BooleanLiteral (lv <= rv)))
+        (ResultLiteral (FloatLiteral lv), ResultLiteral (FloatLiteral rv)) ->
+            Just (ResultLiteral (BooleanLiteral (lv <= rv)))
+        _ -> Nothing
 
 evaluate :: Expr -> Context -> Maybe Result
 evaluate Empty _ = Nothing
@@ -446,7 +496,7 @@ exampleProgram =
     Seq
         (If
             (Truth (EqualOp
-                (Arithmetic (MultiplyOp
+                (Arithmetic(MultiplyOp
                     (ArithmeticValue (Variable "test"))
                     (ArithmeticValue (Literal (IntegerLiteral 9)))))
                 (Literal (IntegerLiteral 27))))
@@ -469,7 +519,8 @@ exampleLoop =
             (VariableDec (Basic Int) "i" (Literal (IntegerLiteral 0)))
             (Truth (NotEqualOp
                 (Variable "i")
-                (Literal (IntegerLiteral 5))))
+                (Literal (IntegerLiteral 5))
+            ))
             (Assignment "i" (Arithmetic (AddOp
                 (ArithmeticValue (Variable "i"))
                 (ArithmeticValue (Literal (IntegerLiteral 1))))))
