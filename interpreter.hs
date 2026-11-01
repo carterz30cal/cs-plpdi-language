@@ -1,4 +1,4 @@
-data BaseType = Str | Boolean | Int | Float | Any
+data BaseType = Str | Boolean | Num | Int | Float | Any
     deriving (Eq, Show)
 
 data Type
@@ -104,17 +104,35 @@ ltype (StringLiteral _) = Basic Str
 ltype (BooleanLiteral _) = Basic Boolean
 
 cast :: Literal -> Type -> Maybe Literal
-cast (IntegerLiteral i) (Basic Int) = Just (IntegerLiteral i)
 cast (IntegerLiteral i) (Basic Float) = Just (FloatLiteral (fromIntegral i))
 cast (IntegerLiteral i) (Basic Str) = Just (StringLiteral (show i))
-cast (FloatLiteral f) (Basic Float) = Just (FloatLiteral f)
 cast (FloatLiteral f) (Basic Str) = Just (StringLiteral (show f))
-cast (StringLiteral s) (Basic Str) = Just (StringLiteral s)
-cast (BooleanLiteral b) (Basic Boolean) = Just (BooleanLiteral b)
 cast lit (Basic Any) = Just lit
 cast lit _ = Just lit
 
+cancast :: Type -> Type -> Bool
+cancast (Basic Num) (Basic Int) = True
+cancast (Basic Num) (Basic Float) = True
+cancast (Basic Int) (Basic Float) = True
+cancast (Basic Int) (Basic Str) = True
+cancast (Basic Float) (Basic Str) = True
+cancast (Basic Any) _ = True
+cancast _ (Basic Any) = True
+cancast _ _ = False
 
+
+-- provides a sort of bound on what types an expression can have without evaluating?
+guess :: Context -> Expr -> Type
+guess context (Literal lit) = ltype lit
+guess context (Variable name) = case variable name context of
+    Just (t, _) -> t
+    Nothing -> Basic Any
+guess context (Call name _) = case lookup name (functions context) of
+    Just (t, _) -> t
+    Nothing -> Basic Any
+guess _ (Arithmetic _) = Basic Num
+guess _ (Truth _) = Basic Boolean
+guess _ _ = Basic Any
 
 -- A function clause has its own patterns and a final return expression.
 -- Repeated FunctionDec nodes retain source order for pattern matching.
@@ -127,7 +145,8 @@ data Statement
     | FunctionDec Type String [Pattern] FunctionBody
     | Emit String Expr
     | Assignment String Expr
-    | For Declaration Expr Statement [Statement]
+    | For Declaration Expr Statement Sequence
+    | Loop Expr Statement Sequence
     | If Expr Sequence (Maybe Sequence)
     | Block [Statement]
     deriving (Show)
@@ -139,7 +158,7 @@ data Sequence = Seq Statement Sequence | End
 data Context = Context
     { variables :: [(String, (Type, Expr))]
     , immutables :: [(String, (Type, Expr))]
-    , functions :: [(String, Type, FunctionBody)]
+    , functions :: [(String, (Type, FunctionBody))]
     , types :: [(String, [Constructor])]
     }
     deriving (Show)
@@ -292,7 +311,7 @@ truth (TruthyValue (Literal lit)) _ = Just (ResultLiteral lit)
 truth (TruthyValue (Variable name)) context = do
     let var = variable name context
     case var of
-        Just (t, expr) -> evaluate expr context
+        Just (t, expr, c') -> evaluate expr c'
         Nothing -> Nothing
 truth (TruthyValue _) _ = Nothing -- maybe there are other cases to consider???
 truth (NotOp expr) context = 
@@ -305,6 +324,12 @@ truth (EqualOp left right) context = do
     if equality l r context
         then Just (ResultLiteral (BooleanLiteral True))
         else Just (ResultLiteral (BooleanLiteral False))
+truth (NotEqualOp left right) context = do
+    let l = evaluate left context
+    let r = evaluate right context
+    if equality l r context
+        then Just (ResultLiteral (BooleanLiteral False))
+        else Just (ResultLiteral (BooleanLiteral True))
 
 evaluate :: Expr -> Context -> Maybe Result
 evaluate Empty _ = Nothing
@@ -317,14 +342,29 @@ evaluate (Variable name) context =
             case lookup name (immutables context) of
                 Just (t, expr) -> evaluate expr context
                 Nothing -> Nothing
+evaluate (Truth op) context = truth op context
+evaluate _ _ = undefined
 
 -- basically just makes all variables immutable within the inner context#
 -- function calls need to clear the immutables/variables that are not present in scope
 freeze :: Context -> Context
 freeze context = context { immutables = variables context ++ immutables context, variables = [] }
 
-execute :: Sequence -> Context -> IO ()
-execute End _ = return ()
+remove :: String -> Context -> Context
+remove name context = context { variables = filter (\(n, _) -> n /= name) (variables context) }
+
+update :: String -> (Type, Expr) -> Context -> Context
+update name value context =
+    context { variables = go (variables context) }
+  where
+    go [] = []
+    go ((key, oldValue) : rest)
+        | key == name = (key, value) : rest
+        | otherwise   = (key, oldValue) : go rest
+
+
+execute :: Sequence -> Context -> IO Context
+execute End context = pure context
 execute (Seq Pass rest) context = execute rest context
 execute (Seq (Emit name expr) rest) context = do
     case evaluate expr context of
@@ -332,22 +372,55 @@ execute (Seq (Emit name expr) rest) context = do
         Just (ResultConstruct con fields) -> putStrLn $ name ++ ": " ++ con ++ " " ++ show fields
         Nothing -> putStrLn $ name ++ ": " ++ "failed to emit expression"
     execute rest context -- not proper input/output but i think this is good enough as a demo
+execute (Seq (Assignment name expr) rest) context = do
+    let check = guess context expr
+    let varch = guess context (Variable name)
+    if typeMatch check varch || cancast check varch then execute rest (update name (check, expr) context)
+    else do
+        putStrLn $ "Type mismatch in assignment to variable: " ++ name
+        execute rest context
+
+--while :: Context -> Expr -> Sequence -> Context
+
+execute (Seq (Loop condition iterator (Seq f n)) _) context = do
+    case evaluate condition context of
+        Just (ResultLiteral (BooleanLiteral True)) -> do
+            context' <- execute (Seq f n) context
+            context'' <- execute (Seq iterator End) context'
+            execute (Seq (Loop condition iterator (Seq f n)) End) context''
+        Just (ResultLiteral (BooleanLiteral False)) -> return context
+        _ -> do 
+            putStrLn "Condition did not evaluate to a boolean"
+            return context
+
+execute (Seq (For (VariableDec t name assignment) condition iterator body) rest) context = do
+    let newContext = context { variables = (name, (t, assignment)) : variables context }
+    context' <- execute (Seq (Loop condition iterator body) rest) newContext
+    execute rest (remove name context')
+
 execute (Seq (Declare (VariableDec t name assignment)) rest) context = do
     let newContext = context { variables = (name, (t, assignment)) : variables context }
     execute rest newContext
-execute (Seq (If condition thenExpr elseExpr) rest) context = do
-    case condition of 
-        Truth (truthy) -> do 
-            let result = truth truthy context
-            case result of
+execute (Seq (If condition thenExpr elseExpr) rest) context =
+    case condition of
+        Truth truthy ->
+            case truth truthy context of
                 Just (ResultLiteral (BooleanLiteral True)) -> do
-                    execute thenExpr (freeze context)
-                Just (ResultLiteral (BooleanLiteral False)) -> do
+                    context' <- execute thenExpr context
+                    execute rest context'
+                Just (ResultLiteral (BooleanLiteral False)) ->
                     case elseExpr of
-                        Just elseSeq -> execute elseSeq (freeze context)
-                _ -> putStrLn "Condition did not evaluate"
+                        Just elseSeq -> do
+                            context' <- execute elseSeq context
+                            execute rest context'
+                        Nothing ->
+                            execute rest context
+                _ -> do
+                    putStrLn "Condition did not evaluate to a boolean"
+                    execute rest context
+        _ -> do
+            putStrLn "Condition is not a truthy expression"
             execute rest context
-        _ -> putStrLn "Condition is not a truthy expression"
 
 exampleContext :: Context
 exampleContext = Context
@@ -377,3 +450,32 @@ exampleProgram =
             (Seq (Emit "result" (Literal (IntegerLiteral 27))) End)
             Nothing)
         End
+
+exampleAssignment = 
+    Seq
+        (
+            Assignment "test" (Arithmetic (AddOp
+            (ArithmeticValue (Variable "test"))
+            (ArithmeticValue (Literal (IntegerLiteral 5)))))
+        )
+    End
+
+exampleLoop = 
+    Seq
+        (For
+            (VariableDec (Basic Int) "i" (Literal (IntegerLiteral 0)))
+            (Truth (NotEqualOp
+                (Variable "i")
+                (Literal (IntegerLiteral 5))))
+            (Assignment "i" (Arithmetic (AddOp
+                (ArithmeticValue (Variable "i"))
+                (ArithmeticValue (Literal (IntegerLiteral 1))))))
+            (
+                Seq
+                    (
+                        Emit "i" (Variable "i")
+                    )
+                    End
+            )
+        )
+    End
