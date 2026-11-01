@@ -60,6 +60,7 @@ data TruthyOperation a
 data Expr
     = Literal Literal
     | Variable String
+    | Node Expr Context
     | Call String [Expr]
     | Construct String [Expr]
     | Inhale String
@@ -311,7 +312,7 @@ truth (TruthyValue (Literal lit)) _ = Just (ResultLiteral lit)
 truth (TruthyValue (Variable name)) context = do
     let var = variable name context
     case var of
-        Just (t, expr, c') -> evaluate expr c'
+        Just (t, expr) -> evaluate expr context
         Nothing -> Nothing
 truth (TruthyValue _) _ = Nothing -- maybe there are other cases to consider???
 truth (NotOp expr) context = 
@@ -343,6 +344,7 @@ evaluate (Variable name) context =
                 Just (t, expr) -> evaluate expr context
                 Nothing -> Nothing
 evaluate (Truth op) context = truth op context
+evaluate (Node expr c) _ = evaluate expr c
 evaluate _ _ = undefined
 
 -- basically just makes all variables immutable within the inner context#
@@ -354,12 +356,13 @@ remove :: String -> Context -> Context
 remove name context = context { variables = filter (\(n, _) -> n /= name) (variables context) }
 
 update :: String -> (Type, Expr) -> Context -> Context
-update name value context =
+update name (t, expr) context =
     context { variables = go (variables context) }
   where
+    storedExpr = Node expr context
     go [] = []
     go ((key, oldValue) : rest)
-        | key == name = (key, value) : rest
+        | key == name = (key, (t, storedExpr)) : rest
         | otherwise   = (key, oldValue) : go rest
 
 
