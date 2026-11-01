@@ -15,7 +15,7 @@ data Literal
     deriving (Eq, Show)
 
 data Constructor = Con String [Type]
-    deriving (Eq, Show)
+    deriving (Show)
 
 data Declaration
     = VariableDec Type String (Maybe Expr)
@@ -70,7 +70,19 @@ data Expr
 data Result
     = ResultLiteral Literal
     | ResultConstruct String [Expr]
-    deriving (Show, Eq)
+    deriving (Show)
+
+equality :: Maybe Result -> Maybe Result -> Context -> Bool
+equality (Just (ResultLiteral l1)) (Just (ResultLiteral l2)) _ = l1 == l2
+equality (Just (ResultConstruct name1 fields1)) (Just (ResultConstruct name2 fields2)) context =
+    name1 == name2 && length fields1 == length fields2 && all
+            (\(x, y) ->
+                equality (evaluate (Just x) context)
+                         (evaluate (Just y) context)
+                         context)
+            (zip fields1 fields2)
+equality Nothing Nothing _ = True
+equality _ _ _ = False
 
 -- A function clause has its own patterns and a final return expression.
 -- Repeated FunctionDec nodes retain source order for pattern matching.
@@ -84,7 +96,7 @@ data Statement
     | Emit String Expr
     | Assignment String Expr
     | For Declaration Expr Statement [Statement]
-    | If Expr [Statement] (Maybe [Statement])
+    | If Expr Sequence (Maybe Sequence)
     | Block [Statement]
     deriving (Show)
 
@@ -145,9 +157,11 @@ truth (NotOp expr) context =
         Just (ResultLiteral (BooleanLiteral v)) -> Just (ResultLiteral (BooleanLiteral (not v)))
         _ -> Nothing
 truth (EqualOp left right) context = do
-    ResultLiteral l <- arithmetic left context
-    ResultLiteral r <- arithmetic right context
-    return $ ResultLiteral (BooleanLiteral (l == r))
+    let l = evaluate (Just left) context
+    let r = evaluate (Just right) context
+    if equality l r context
+        then Just (ResultLiteral (BooleanLiteral True))
+        else Just (ResultLiteral (BooleanLiteral False))
 
 evaluate :: Maybe Expr -> Context -> Maybe Result
 evaluate Nothing _ = Nothing
@@ -158,9 +172,34 @@ evaluate (Just (Variable name)) context =
         Just expr -> evaluate (Just expr) context
         Nothing   -> evaluate (lookup name (immutables context)) context
 
+-- basically just makes all variables immutable within the inner context#
+-- function calls need to clear the immutables/variables that are not present in scope
+freeze :: Context -> Context
+freeze context = context { immutables = variables context ++ immutables context, variables = [] }
+
 execute :: Sequence -> Context -> IO ()
 execute End _ = return ()
 execute (Seq Pass rest) context = execute rest context
+execute (Seq (Emit name expr) rest) context = do
+    case evaluate (Just expr) context of
+        Just (ResultLiteral lit) -> putStrLn $ name ++ ": " ++ show lit
+        Just (ResultConstruct con fields) -> putStrLn $ name ++ ": " ++ con ++ " " ++ show fields
+        Nothing -> putStrLn $ name ++ ": " ++ "failed to emit expression"
+    execute rest context -- not proper input/output but i think this is good enough as a demo
+execute (Seq (Declare ))
+execute (Seq (If condition thenExpr elseExpr) rest) context = do
+    case condition of 
+        Truth (truthy) -> do 
+            let result = truth truthy context
+            case result of
+                Just (ResultLiteral (BooleanLiteral True)) -> do
+                    execute thenExpr (freeze context)
+                Just (ResultLiteral (BooleanLiteral False)) -> do
+                    case elseExpr of
+                        Just elseSeq -> execute elseSeq (freeze context)
+                _ -> putStrLn "Condition did not evaluate"
+            execute rest context
+        _ -> putStrLn "Condition is not a truthy expression"
 
 exampleContext :: Context
 exampleContext = Context
@@ -170,10 +209,23 @@ exampleContext = Context
     , types = []
     }
 
-exampleTree :: ArithmeticOperation Expr
-exampleTree = MultiplyOp
+exampleTree :: Expr
+exampleTree = Arithmetic (MultiplyOp
     (ArithmeticValue (Variable "test"))
-    (ArithmeticValue (Literal (IntegerLiteral 9)))
+    (ArithmeticValue (Literal (IntegerLiteral 9))))
 
 exampleResult :: Maybe Result
-exampleResult = arithmetic exampleTree exampleContext
+exampleResult = evaluate (Just exampleTree) exampleContext
+
+exampleProgram :: Sequence
+exampleProgram =
+    Seq
+        (If
+            (Truth (EqualOp
+                (Arithmetic (MultiplyOp
+                    (ArithmeticValue (Variable "test"))
+                    (ArithmeticValue (Literal (IntegerLiteral 9)))))
+                (Literal (IntegerLiteral 27))))
+            (Seq (Emit "result" (Literal (IntegerLiteral 27))) End)
+            Nothing)
+        End
