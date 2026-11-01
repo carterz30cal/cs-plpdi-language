@@ -18,7 +18,7 @@ data Constructor = Con String [Type]
     deriving (Show)
 
 data Declaration
-    = VariableDec Type String (Maybe Expr)
+    = VariableDec Type String Expr
     | TypeDec String [String] [Constructor]
     deriving (Show)
 
@@ -65,6 +65,7 @@ data Expr
     | Inhale String
     | Arithmetic (ArithmeticOperation Expr)
     | Truth (TruthyOperation Expr)
+    | Empty
     deriving (Show)
 -- simmers expressions down into a subset of options which can be worked on
 data Result
@@ -77,9 +78,7 @@ equality (Just (ResultLiteral l1)) (Just (ResultLiteral l2)) _ = l1 == l2
 equality (Just (ResultConstruct name1 fields1)) (Just (ResultConstruct name2 fields2)) context =
     name1 == name2 && length fields1 == length fields2 && all
             (\(x, y) ->
-                equality (evaluate (Just x) context)
-                         (evaluate (Just y) context)
-                         context)
+                equality (evaluate x context) (evaluate y context) context)
             (zip fields1 fields2)
 equality Nothing Nothing _ = True
 equality _ _ _ = False
@@ -105,16 +104,26 @@ data Sequence = Seq Statement Sequence | End
 
 
 data Context = Context
-    { variables :: [(String, Expr)]
-    , immutables :: [(String, Expr)]
-    , functions :: [(String, FunctionBody)]
+    { variables :: [(String, (Type, Expr))]
+    , immutables :: [(String, (Type, Expr))]
+    , functions :: [(String, Type, FunctionBody)]
     , types :: [(String, [Constructor])]
     }
     deriving (Show)
 
+variable :: String -> Context -> Maybe (Type, Expr)
+variable name context =
+    case lookup name (variables context) of
+        Just (t, expr) -> Just (t, expr)
+        Nothing -> lookup name (immutables context)
+
 arithmetic :: ArithmeticOperation Expr -> Context -> Maybe Result
 arithmetic (ArithmeticValue (Literal lit)) _ = Just (ResultLiteral lit)
-arithmetic (ArithmeticValue (Variable name)) context = evaluate (lookup name (variables context)) context 
+arithmetic (ArithmeticValue (Variable name)) context = do
+    let var = variable name context
+    case var of
+        Just (t, expr) -> evaluate expr context
+        Nothing -> Nothing
 arithmetic (ArithmeticValue _) _ = Nothing -- unfinished!
 arithmetic (AddOp left right) context = do
     ResultLiteral (IntegerLiteral l) <- arithmetic left context
@@ -150,27 +159,34 @@ arithmetic (NegateOp expr) context = do
 
 truth :: TruthyOperation Expr -> Context -> Maybe Result
 truth (TruthyValue (Literal lit)) _ = Just (ResultLiteral lit)
-truth (TruthyValue (Variable name)) context = evaluate (lookup name (variables context)) context
+truth (TruthyValue (Variable name)) context = do
+    let var = variable name context
+    case var of
+        Just (t, expr) -> evaluate expr context
+        Nothing -> Nothing
 truth (TruthyValue _) _ = Nothing -- maybe there are other cases to consider???
 truth (NotOp expr) context = 
     case truth expr context of
         Just (ResultLiteral (BooleanLiteral v)) -> Just (ResultLiteral (BooleanLiteral (not v)))
         _ -> Nothing
 truth (EqualOp left right) context = do
-    let l = evaluate (Just left) context
-    let r = evaluate (Just right) context
+    let l = evaluate left context
+    let r = evaluate right context
     if equality l r context
         then Just (ResultLiteral (BooleanLiteral True))
         else Just (ResultLiteral (BooleanLiteral False))
 
-evaluate :: Maybe Expr -> Context -> Maybe Result
-evaluate Nothing _ = Nothing
-evaluate (Just (Literal lit)) _ = Just (ResultLiteral lit)
-evaluate (Just (Arithmetic op)) context = arithmetic op context
-evaluate (Just (Variable name)) context =
+evaluate :: Expr -> Context -> Maybe Result
+evaluate Empty _ = Nothing
+evaluate (Literal lit) _ = Just (ResultLiteral lit)
+evaluate (Arithmetic op) context = arithmetic op context
+evaluate (Variable name) context =
     case lookup name (variables context) of
-        Just expr -> evaluate (Just expr) context
-        Nothing   -> evaluate (lookup name (immutables context)) context
+        Just (t, expr) -> evaluate expr context
+        Nothing   -> do 
+            case lookup name (immutables context) of
+                Just (t, expr) -> evaluate expr context
+                Nothing -> Nothing
 
 -- basically just makes all variables immutable within the inner context#
 -- function calls need to clear the immutables/variables that are not present in scope
@@ -181,12 +197,14 @@ execute :: Sequence -> Context -> IO ()
 execute End _ = return ()
 execute (Seq Pass rest) context = execute rest context
 execute (Seq (Emit name expr) rest) context = do
-    case evaluate (Just expr) context of
+    case evaluate expr context of
         Just (ResultLiteral lit) -> putStrLn $ name ++ ": " ++ show lit
         Just (ResultConstruct con fields) -> putStrLn $ name ++ ": " ++ con ++ " " ++ show fields
         Nothing -> putStrLn $ name ++ ": " ++ "failed to emit expression"
     execute rest context -- not proper input/output but i think this is good enough as a demo
-execute (Seq (Declare ))
+execute (Seq (Declare (VariableDec t name assignment)) rest) context = do
+    let newContext = context { variables = (name, (t, assignment)) : variables context }
+    execute rest newContext
 execute (Seq (If condition thenExpr elseExpr) rest) context = do
     case condition of 
         Truth (truthy) -> do 
@@ -203,7 +221,7 @@ execute (Seq (If condition thenExpr elseExpr) rest) context = do
 
 exampleContext :: Context
 exampleContext = Context
-    { variables = [("test", Literal (IntegerLiteral 3))]
+    { variables = [("test", ((Basic Num), Literal (IntegerLiteral 3)))]
     , immutables = []
     , functions = []
     , types = []
@@ -215,7 +233,7 @@ exampleTree = Arithmetic (MultiplyOp
     (ArithmeticValue (Literal (IntegerLiteral 9))))
 
 exampleResult :: Maybe Result
-exampleResult = evaluate (Just exampleTree) exampleContext
+exampleResult = evaluate exampleTree exampleContext
 
 exampleProgram :: Sequence
 exampleProgram =
