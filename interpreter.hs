@@ -4,8 +4,8 @@ data BaseType = Str | Boolean | Int | Float | Any
 data Type
     = Basic BaseType
     | TypeVariable String
-    | Defined Constructor
-    deriving (Eq, Show)
+    | Defined String [Type]
+    deriving (Show)
 
 data Literal
     = StringLiteral String
@@ -74,7 +74,7 @@ data Result
     deriving (Show)
 
 equality :: Maybe Result -> Maybe Result -> Context -> Bool
-equality (Just (ResultLiteral l1)) (Just (ResultLiteral l2)) _ = l1 == l2
+equality (Just (ResultLiteral l1)) (Just (ResultLiteral l2)) _ = literalMatch l1 l2
 equality (Just (ResultConstruct name1 fields1)) (Just (ResultConstruct name2 fields2)) context =
     name1 == name2 && length fields1 == length fields2 && all
             (\(x, y) ->
@@ -88,13 +88,20 @@ literalMatch i j = i == j
 
 typeMatch :: Type -> Type -> Bool
 typeMatch (Basic b1) (Basic b2) = b1 == b2
+typeMatch (Defined n1 _) (Defined n2 _) = n1 == n2
+typeMatch _ _ = False
 
-type :: Result -> Type
-type (ResultLiteral (IntegerLiteral _)) = Basic Int
-type (ResultLiteral (FloatLiteral _)) = Basic Float
-type (ResultLiteral (StringLiteral _)) = Basic Str
-type (ResultLiteral (BooleanLiteral _)) = Basic Boolean
-type (ResultConstruct name fields) = Defined (Con name (map type fields))
+rtype :: Result -> Context -> Type
+rtype (ResultLiteral (IntegerLiteral _)) _ = Basic Int
+rtype (ResultLiteral (FloatLiteral _)) _ = Basic Float
+rtype (ResultLiteral (StringLiteral _)) _ = Basic Str
+rtype (ResultLiteral (BooleanLiteral _)) _ = Basic Boolean
+
+ltype :: Literal -> Type
+ltype (IntegerLiteral _) = Basic Int
+ltype (FloatLiteral _) = Basic Float
+ltype (StringLiteral _) = Basic Str
+ltype (BooleanLiteral _) = Basic Boolean
 
 cast :: Literal -> Type -> Maybe Literal
 cast (IntegerLiteral i) (Basic Int) = Just (IntegerLiteral i)
@@ -104,7 +111,8 @@ cast (FloatLiteral f) (Basic Float) = Just (FloatLiteral f)
 cast (FloatLiteral f) (Basic Str) = Just (StringLiteral (show f))
 cast (StringLiteral s) (Basic Str) = Just (StringLiteral s)
 cast (BooleanLiteral b) (Basic Boolean) = Just (BooleanLiteral b)
-cast _ _ = Nothing
+cast lit (Basic Any) = Just lit
+cast lit _ = Just lit
 
 
 
@@ -142,6 +150,107 @@ variable name context =
         Just (t, expr) -> Just (t, expr)
         Nothing -> lookup name (immutables context)
 
+add :: Result -> Result -> Maybe Result
+add (ResultLiteral left) (ResultLiteral right) = do
+    if typeMatch (ltype left) (ltype right) then do
+        case (left, right) of
+            (IntegerLiteral l, IntegerLiteral r) ->
+                Just (ResultLiteral (IntegerLiteral (l + r)))
+            (FloatLiteral l, FloatLiteral r) ->
+                Just (ResultLiteral (FloatLiteral (l + r)))
+            _ -> Nothing
+    else do
+        let cleft = cast left (ltype right)
+        let cright = cast right (ltype left)
+        case (cleft, cright) of
+            (Just l, Just r) -> add (ResultLiteral l) (ResultLiteral r)
+            _ -> Nothing
+add _ _ = Nothing
+
+sub :: Result -> Result -> Maybe Result
+sub (ResultLiteral left) (ResultLiteral right) = do
+    if typeMatch (ltype left) (ltype right) then do
+        case (left, right) of
+            (IntegerLiteral l, IntegerLiteral r) ->
+                Just (ResultLiteral (IntegerLiteral (l - r)))
+            (FloatLiteral l, FloatLiteral r) ->
+                Just (ResultLiteral (FloatLiteral (l - r)))
+            _ -> Nothing
+    else do
+        let cleft = cast left (ltype right)
+        let cright = cast right (ltype left)
+        case (cleft, cright) of
+            (Just l, Just r) -> sub (ResultLiteral l) (ResultLiteral r)
+            _ -> Nothing
+sub _ _ = Nothing
+
+mult :: Result -> Result -> Maybe Result
+mult (ResultLiteral left) (ResultLiteral right) = do
+    if typeMatch (ltype left) (ltype right) then do
+        case (left, right) of
+            (IntegerLiteral l, IntegerLiteral r) ->
+                Just (ResultLiteral (IntegerLiteral (l * r)))
+            (FloatLiteral l, FloatLiteral r) ->
+                Just (ResultLiteral (FloatLiteral (l * r)))
+            _ -> Nothing
+    else do
+        let cleft = cast left (ltype right)
+        let cright = cast right (ltype left)
+        case (cleft, cright) of
+            (Just l, Just r) -> mult (ResultLiteral l) (ResultLiteral r)
+            _ -> Nothing
+mult _ _ = Nothing
+
+divide :: Result -> Result -> Maybe Result
+divide (ResultLiteral left) (ResultLiteral right) = do
+    if typeMatch (ltype left) (ltype right) then do
+        case (left, right) of
+            (IntegerLiteral l, IntegerLiteral r) ->
+                if r == 0
+                    then Nothing
+                    else Just (ResultLiteral (IntegerLiteral (div l r)))
+            (FloatLiteral l, FloatLiteral r) ->
+                if r == 0
+                    then Nothing
+                    else Just (ResultLiteral (FloatLiteral (l / r)))
+            _ -> Nothing
+    else do
+        let cleft = cast left (ltype right)
+        let cright = cast right (ltype left)
+        case (cleft, cright) of
+            (Just l, Just r) -> divide (ResultLiteral l) (ResultLiteral r)
+            _ -> Nothing
+divide _ _ = Nothing
+
+power :: Result -> Result -> Maybe Result
+power (ResultLiteral left) (ResultLiteral right) = do
+    if typeMatch (ltype left) (ltype right) then do
+        case (left, right) of
+            (IntegerLiteral l, IntegerLiteral r) ->
+                Just (ResultLiteral (IntegerLiteral (l ^ r)))
+            (FloatLiteral l, FloatLiteral r) ->
+                Just (ResultLiteral (FloatLiteral (l ** r)))
+            _ -> Nothing
+    else do
+        let cleft = cast left (ltype right)
+        let cright = cast right (ltype left)
+        case (cleft, cright) of
+            (Just l, Just r) -> power (ResultLiteral l) (ResultLiteral r)
+            _ -> Nothing
+power _ _ = Nothing
+
+modulo :: Result -> Result -> Maybe Result
+modulo (ResultLiteral (IntegerLiteral l)) (ResultLiteral (IntegerLiteral r)) =
+    if r == 0
+        then Nothing
+        else Just (ResultLiteral (IntegerLiteral (mod l r)))
+modulo _ _ = Nothing
+
+negation :: Result -> Maybe Result
+negation (ResultLiteral (IntegerLiteral v)) = Just (ResultLiteral (IntegerLiteral (-v)))
+negation (ResultLiteral (FloatLiteral v)) = Just (ResultLiteral (FloatLiteral (-v)))
+negation _ = Nothing
+
 arithmetic :: ArithmeticOperation Expr -> Context -> Maybe Result
 arithmetic (ArithmeticValue (Literal lit)) _ = Just (ResultLiteral lit)
 arithmetic (ArithmeticValue (Variable name)) context = do
@@ -151,36 +260,32 @@ arithmetic (ArithmeticValue (Variable name)) context = do
         Nothing -> Nothing
 arithmetic (ArithmeticValue _) _ = Nothing -- unfinished!
 arithmetic (AddOp left right) context = do
-    ResultLiteral (IntegerLiteral l) <- arithmetic left context
-    ResultLiteral (IntegerLiteral r) <- arithmetic right context
-    return $ ResultLiteral (IntegerLiteral (l + r))
+    l <- arithmetic left context
+    r <- arithmetic right context
+    add l r
 arithmetic (SubOp left right) context = do
-    ResultLiteral (IntegerLiteral l) <- arithmetic left context
-    ResultLiteral (IntegerLiteral r) <- arithmetic right context
-    return $ ResultLiteral (IntegerLiteral (l - r))
+    l <- arithmetic left context
+    r <- arithmetic right context
+    sub l r
 arithmetic (MultiplyOp left right) context = do
-    ResultLiteral (IntegerLiteral l) <- arithmetic left context
-    ResultLiteral (IntegerLiteral r) <- arithmetic right context
-    return $ ResultLiteral (IntegerLiteral (l * r))
+    l <- arithmetic left context
+    r <- arithmetic right context
+    mult l r
 arithmetic (DivideOp left right) context = do
-    ResultLiteral (IntegerLiteral l) <- arithmetic left context
-    ResultLiteral (IntegerLiteral r) <- arithmetic right context
-    if r == 0
-        then Nothing
-        else return $ ResultLiteral (IntegerLiteral (div l r))
+    l <- arithmetic left context
+    r <- arithmetic right context
+    divide l r
 arithmetic (PowOp left right) context = do
-    ResultLiteral (IntegerLiteral l) <- arithmetic left context
-    ResultLiteral (IntegerLiteral r) <- arithmetic right context
-    return $ ResultLiteral (IntegerLiteral (l ^ r))
+    l <- arithmetic left context
+    r <- arithmetic right context
+    power l r
 arithmetic (ModuloOp left right) context = do
-    ResultLiteral (IntegerLiteral l) <- arithmetic left context
-    ResultLiteral (IntegerLiteral r) <- arithmetic right context
-    if r == 0
-        then Nothing
-        else return $ ResultLiteral (IntegerLiteral (mod l r))
+    l <- arithmetic left context
+    r <- arithmetic right context
+    modulo l r
 arithmetic (NegateOp expr) context = do
-    ResultLiteral (IntegerLiteral v) <- arithmetic expr context
-    return $ ResultLiteral (IntegerLiteral (-v))
+    u <- arithmetic expr context
+    negation u
 
 truth :: TruthyOperation Expr -> Context -> Maybe Result
 truth (TruthyValue (Literal lit)) _ = Just (ResultLiteral lit)
@@ -253,9 +358,9 @@ exampleContext = Context
     }
 
 exampleTree :: Expr
-exampleTree = Arithmetic (MultiplyOp
+exampleTree = Arithmetic (AddOp
     (ArithmeticValue (Variable "test"))
-    (ArithmeticValue (Literal (IntegerLiteral 9))))
+    (ArithmeticValue (Literal (FloatLiteral 9.5))))
 
 exampleResult :: Maybe Result
 exampleResult = evaluate exampleTree exampleContext
