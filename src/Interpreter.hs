@@ -1,3 +1,5 @@
+module Interpreter (execute, Sequence(..), Statement(..), Context(..), exampleFactorialProgram, exampleContext) where
+
 data BaseType = Str | Boolean | Num | Int | Float | Any
     deriving (Eq, Show)
 
