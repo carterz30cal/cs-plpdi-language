@@ -1,11 +1,15 @@
-module Interpreter (execute, Sequence(..), Statement(..), Context(..), exampleFactorialProgram, exampleContext) where
+module Interpreter (execute, 
+    Sequence(..), Statement(..), Context(..), Expr(..), Literal(..), 
+    Type(..), BaseType(..), Constructor(..),
+    Pattern(..),
+    Declaration(..), guess, exampleFactorialProgram, exampleContext) where
 
 data BaseType = Str | Boolean | Num | Int | Float | Any
     deriving (Eq, Show)
 
 data Type
     = Basic BaseType
-    | TypeVariable String
+    | TypeVariable String -- unused
     | Defined String [Type]
     deriving (Show)
 

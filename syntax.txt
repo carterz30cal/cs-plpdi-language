@@ -63,7 +63,7 @@ local variables hide function calls, if the same name is chosen
 for evaluation, f g x will apply g to x then apply the result to f
 <CALL> ::= <STR> <CALL_PARAS> | <STR>
 
-
+comments are denoted by // for a line comment or /* */ for block comments
 
 examples
 any function identity x = x;

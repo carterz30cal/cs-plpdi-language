@@ -23,7 +23,7 @@ name:               cs-plpdi-language
 version:            0.1.0.0
 
 -- A short (one-line) description of the package.
--- synopsis:
+synopsis: a really slow interpreted programming language that has sort of lazy evaluation and is call by name for the most part
 
 -- A longer description of the package.
 -- description:
@@ -59,7 +59,7 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  Interpreter
+    exposed-modules:  Interpreter, Parser
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -68,7 +68,7 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.20.2.0, megaparsec
+    build-depends:    base ^>=4.20.2.0, megaparsec, parser-combinators, text
 
     -- Directories containing source files.
     hs-source-dirs:   src
