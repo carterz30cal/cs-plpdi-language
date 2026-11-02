@@ -82,3 +82,10 @@ num function recursive_factorial x = x * recursive_factorial (x - 1);
 any function head Cons(x,_) = x;
 list[any] function tail Cons(_,xs) = xs;
 list[num] function ones = Cons(1, ones)
+
+
+-- update
+think constructors will have to be called using square brackets instead (interpreter doesn't hold context)
+so it'd be:
+list[any] function tail Cons(_,xs) = xs;
+list[num] function ones = Cons[1, ones]

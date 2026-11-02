@@ -92,7 +92,9 @@ executable cs-plpdi-language
     -- Other library packages from which modules are imported.
     build-depends:
         base ^>=4.20.2.0,
-        cs-plpdi-language
+        cs-plpdi-language,
+        megaparsec,
+        text
 
     -- Directories containing source files.
     hs-source-dirs:   app

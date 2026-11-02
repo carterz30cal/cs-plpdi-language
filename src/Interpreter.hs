@@ -1,7 +1,9 @@
 module Interpreter (execute, 
     Sequence(..), Statement(..), Context(..), Expr(..), Literal(..), 
     Type(..), BaseType(..), Constructor(..),
-    Pattern(..),
+    Pattern(..),FunctionBody(..),
+    ArithmeticOperation(..),
+    TruthyOperation(..),
     Declaration(..), guess, exampleFactorialProgram, exampleContext) where
 
 data BaseType = Str | Boolean | Num | Int | Float | Any

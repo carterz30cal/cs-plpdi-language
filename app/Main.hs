@@ -1,8 +1,24 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Main (main) where
 
-import qualified Interpreter (execute, exampleFactorialProgram, exampleContext, Context(..))
+import qualified Interpreter (execute, exampleContext)
+import Parser (parseProgram)
+import Text.Megaparsec
+import Data.Text (Text)
 
-main :: IO Interpreter.Context
+program :: Text
+program = "pass; let num test = 6; emit \"val\" test;"
+
+fibonacci :: Text
+fibonacci = "num function fibonacci 0 = 1;num function fibonacci 1 = 1;num function fibonacci x = fibonacci(x-1) + fibonacci(x - 2);emit \"result\" fibonacci(5);"
+
+
+main :: IO ()
 main = do
-  putStrLn "Hello, Haskell!"
-  Interpreter.execute Interpreter.exampleFactorialProgram Interpreter.exampleContext
+  putStrLn "running program woo"
+  case parseProgram fibonacci of
+    Left err -> putStrLn (errorBundlePretty err)
+    Right ast -> do
+      _ <- Interpreter.execute ast Interpreter.exampleContext
+      pure ()
