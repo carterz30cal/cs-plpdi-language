@@ -74,18 +74,22 @@ data Result
     | ResultConstruct String [Expr]
     deriving (Show)
 
-equality :: Maybe Result -> Maybe Result -> Context -> Bool
-equality (Just (ResultLiteral l1)) (Just (ResultLiteral l2)) _ = literalMatch l1 l2
-equality (Just (ResultConstruct name1 fields1)) (Just (ResultConstruct name2 fields2)) context =
-    name1 == name2 && length fields1 == length fields2 && all
-            (\(x, y) ->
-                equality (evaluate x context) (evaluate y context) context)
-            (zip fields1 fields2)
-equality Nothing Nothing _ = True
-equality _ _ _ = False
+equality :: Maybe Result -> Maybe Result -> Context -> IO Bool
+equality (Just (ResultLiteral l1)) (Just (ResultLiteral l2)) _ = pure (l1 == l2)
+equality (Just (ResultConstruct n xs)) (Just (ResultConstruct m ys)) context
+    | n /= m || length xs /= length ys = pure False
+    | otherwise = do
+        results <- mapM compareField (zip xs ys)
+        pure (and results)
+  where
+    compareField (x, y) = do
+        rx <- evaluate x context
+        ry <- evaluate y context
+        equality rx ry context
 
-literalMatch :: Literal -> Literal -> Bool
-literalMatch i j = i == j
+equality Nothing Nothing _ = pure True
+equality _ _ _ = pure False
+
 
 typeMatch :: Type -> Type -> Bool
 typeMatch (Basic b1) (Basic b2) = b1 == b2
@@ -137,7 +141,7 @@ guess _ _ = Basic Any
 
 -- A function clause has its own patterns and a final return expression.
 -- Repeated FunctionDec nodes retain source order for pattern matching.
-data FunctionBody = FunctionBody [Statement] Expr
+data FunctionBody = FunctionBody [Maybe String] Sequence Expr
     deriving (Show)
 
 data Statement
@@ -159,7 +163,8 @@ data Sequence = Seq Statement Sequence | End
 data Context = Context
     { variables :: [(String, (Type, Expr))]
     , immutables :: [(String, (Type, Expr))]
-    , functions :: [(String, (Type, FunctionBody))]
+    , functions :: [(String, (Type, [([Pattern], FunctionBody)]))]
+    , constructors :: [(String, Constructor)]
     , types :: [(String, [Constructor])]
     }
     deriving (Show)
@@ -271,120 +276,194 @@ negation (ResultLiteral (IntegerLiteral v)) = Just (ResultLiteral (IntegerLitera
 negation (ResultLiteral (FloatLiteral v)) = Just (ResultLiteral (FloatLiteral (-v)))
 negation _ = Nothing
 
-arithmetic :: ArithmeticOperation Expr -> Context -> Maybe Result
-arithmetic (ArithmeticValue (Literal lit)) _ = Just (ResultLiteral lit)
-arithmetic (ArithmeticValue (Variable name)) context = do
-    let var = variable name context
-    case var of
-        Just (t, expr) -> evaluate expr context
-        Nothing -> Nothing
-arithmetic (ArithmeticValue _) _ = Nothing -- unfinished!
+arithmetic :: ArithmeticOperation Expr -> Context -> IO (Maybe Result)
+arithmetic (ArithmeticValue expr) context = evaluate expr context
 arithmetic (AddOp left right) context = do
-    l <- arithmetic left context
-    r <- arithmetic right context
-    add l r
+    left <- arithmetic left context
+    right <- arithmetic right context
+    pure $ case (left, right) of
+        (Just l, Just r) -> add l r
+        _ -> Nothing
 arithmetic (SubOp left right) context = do
-    l <- arithmetic left context
-    r <- arithmetic right context
-    sub l r
+    left <- arithmetic left context
+    right <- arithmetic right context
+    pure $ case (left, right) of
+        (Just l, Just r) -> sub l r
+        _ -> Nothing
 arithmetic (MultiplyOp left right) context = do
-    l <- arithmetic left context
-    r <- arithmetic right context
-    mult l r
+    left <- arithmetic left context
+    right <- arithmetic right context
+    pure $ case (left, right) of
+        (Just l, Just r) -> mult l r
+        _ -> Nothing
 arithmetic (DivideOp left right) context = do
-    l <- arithmetic left context
-    r <- arithmetic right context
-    divide l r
+    left <- arithmetic left context
+    right <- arithmetic right context
+    pure $ case (left, right) of
+        (Just l, Just r) -> divide l r
+        _ -> Nothing
 arithmetic (PowOp left right) context = do
-    l <- arithmetic left context
-    r <- arithmetic right context
-    power l r
+    left <- arithmetic left context
+    right <- arithmetic right context
+    pure $ case (left, right) of
+        (Just l, Just r) -> power l r
+        _ -> Nothing
 arithmetic (ModuloOp left right) context = do
-    l <- arithmetic left context
-    r <- arithmetic right context
-    modulo l r
+    left <- arithmetic left context
+    right <- arithmetic right context
+    pure $ case (left, right) of
+        (Just l, Just r) -> modulo l r
+        _ -> Nothing
 arithmetic (NegateOp expr) context = do
-    u <- arithmetic expr context
-    negation u
+    unit <- arithmetic expr context
+    pure $ case unit of
+        Nothing -> Nothing
+        Just u -> negation u
 
-truth :: TruthyOperation Expr -> Context -> Maybe Result
-truth (TruthyValue (Literal lit)) _ = Just (ResultLiteral lit)
+truth :: TruthyOperation Expr -> Context -> IO (Maybe Result)
+truth (TruthyValue (Literal lit)) _ = pure (Just (ResultLiteral lit))
 truth (TruthyValue (Variable name)) context = do
     let var = variable name context
     case var of
         Just (t, expr) -> evaluate expr context
-        Nothing -> Nothing
-truth (TruthyValue _) _ = Nothing -- maybe there are other cases to consider???
-truth (NotOp expr) context = 
-    case truth expr context of
+        Nothing -> pure Nothing
+truth (TruthyValue _) _ = pure Nothing -- maybe there are other cases to consider???
+truth (NotOp expr) context = do
+    result <- truth expr context
+    pure $ case result of
         Just (ResultLiteral (BooleanLiteral v)) -> Just (ResultLiteral (BooleanLiteral (not v)))
         _ -> Nothing
 truth (EqualOp left right) context = do
-    let l = evaluate left context
-    let r = evaluate right context
-    if equality l r context
+    l <- evaluate left context
+    r <- evaluate right context
+    eq <- equality l r context
+    pure $ if eq
         then Just (ResultLiteral (BooleanLiteral True))
         else Just (ResultLiteral (BooleanLiteral False))
 truth (NotEqualOp left right) context = do
-    let l = evaluate left context
-    let r = evaluate right context
-    if equality l r context
+    l <- evaluate left context
+    r <- evaluate right context
+    eq <- equality l r context
+    pure $ if eq
         then Just (ResultLiteral (BooleanLiteral False))
         else Just (ResultLiteral (BooleanLiteral True))
 truth (AndOp left right) context = do
     l <- truth left context
     r <- truth right context
-    case (l, r) of
-        (ResultLiteral (BooleanLiteral lv), ResultLiteral (BooleanLiteral rv)) ->
+    pure $ case (l, r) of
+        (Just (ResultLiteral (BooleanLiteral lv)), Just (ResultLiteral (BooleanLiteral rv))) ->
             Just (ResultLiteral (BooleanLiteral (lv && rv)))
         _ -> Nothing
 truth (OrOp left right) context = do
     l <- truth left context
     r <- truth right context
-    case (l, r) of
-        (ResultLiteral (BooleanLiteral lv), ResultLiteral (BooleanLiteral rv)) ->
+    pure $ case (l, r) of
+        (Just (ResultLiteral (BooleanLiteral lv)), Just (ResultLiteral (BooleanLiteral rv))) ->
             Just (ResultLiteral (BooleanLiteral (lv || rv)))
         _ -> Nothing
 truth (GreaterThanOp left right) context = do
     l <- arithmetic left context
     r <- arithmetic right context
-    case (l, r) of
-        (ResultLiteral (IntegerLiteral lv), ResultLiteral (IntegerLiteral rv)) ->
+    pure $ case (l, r) of
+        (Just (ResultLiteral (IntegerLiteral lv)), Just (ResultLiteral (IntegerLiteral rv))) ->
             Just (ResultLiteral (BooleanLiteral (lv > rv)))
-        (ResultLiteral (FloatLiteral lv), ResultLiteral (FloatLiteral rv)) ->
+        (Just (ResultLiteral (FloatLiteral lv)), Just (ResultLiteral (FloatLiteral rv))) ->
             Just (ResultLiteral (BooleanLiteral (lv > rv)))
         _ -> Nothing
 truth (GreaterThanEqualOp left right) context = do
     l <- arithmetic left context
     r <- arithmetic right context
-    case (l, r) of
-        (ResultLiteral (IntegerLiteral lv), ResultLiteral (IntegerLiteral rv)) ->
+    pure $ case (l, r) of
+        (Just (ResultLiteral (IntegerLiteral lv)), Just (ResultLiteral (IntegerLiteral rv))) ->
             Just (ResultLiteral (BooleanLiteral (lv >= rv)))
-        (ResultLiteral (FloatLiteral lv), ResultLiteral (FloatLiteral rv)) ->
+        (Just (ResultLiteral (FloatLiteral lv)), Just (ResultLiteral (FloatLiteral rv))) ->
             Just (ResultLiteral (BooleanLiteral (lv >= rv)))
         _ -> Nothing
 truth (LessThanOp left right) context = do
     l <- arithmetic left context
     r <- arithmetic right context
-    case (l, r) of
-        (ResultLiteral (IntegerLiteral lv), ResultLiteral (IntegerLiteral rv)) ->
+    pure $ case (l, r) of
+        (Just (ResultLiteral (IntegerLiteral lv)), Just (ResultLiteral (IntegerLiteral rv))) ->
             Just (ResultLiteral (BooleanLiteral (lv < rv)))
-        (ResultLiteral (FloatLiteral lv), ResultLiteral (FloatLiteral rv)) ->
+        (Just (ResultLiteral (FloatLiteral lv)), Just (ResultLiteral (FloatLiteral rv))) ->
             Just (ResultLiteral (BooleanLiteral (lv < rv)))
         _ -> Nothing
 truth (LessThanEqualOp left right) context = do
     l <- arithmetic left context
     r <- arithmetic right context
-    case (l, r) of
-        (ResultLiteral (IntegerLiteral lv), ResultLiteral (IntegerLiteral rv)) ->
+    pure $ case (l, r) of
+        (Just (ResultLiteral (IntegerLiteral lv)), Just (ResultLiteral (IntegerLiteral rv))) ->
             Just (ResultLiteral (BooleanLiteral (lv <= rv)))
-        (ResultLiteral (FloatLiteral lv), ResultLiteral (FloatLiteral rv)) ->
+        (Just (ResultLiteral (FloatLiteral lv)), Just (ResultLiteral (FloatLiteral rv))) ->
             Just (ResultLiteral (BooleanLiteral (lv <= rv)))
         _ -> Nothing
 
-evaluate :: Expr -> Context -> Maybe Result
-evaluate Empty _ = Nothing
-evaluate (Literal lit) _ = Just (ResultLiteral lit)
+
+matchPattern
+    :: Context
+    -> Pattern
+    -> Expr
+    -> IO (Maybe [(String, (Type, Expr))])
+matchPattern _ Wildcard _ = pure (Just [])
+
+matchPattern context (Binding name) expr =
+    pure (Just [(name, (guess context expr, Node expr context))])
+
+matchPattern context (LiteralPattern expected) expr = do
+    eval <- evaluate expr context
+    pure $ case eval of
+        Just (ResultLiteral actual) | expected == actual -> Just []
+        _ -> Nothing
+
+matchPattern context (ConstructorPattern expected subpatterns) expr = do
+    eval <- evaluate expr context
+    case eval of 
+        Just (ResultConstruct actual fields)
+            | expected == actual ->
+                matchPatterns context subpatterns fields
+        _ -> pure Nothing
+
+matchPatterns
+    :: Context
+    -> [Pattern]
+    -> [Expr]
+    -> IO (Maybe [(String, (Type, Expr))])
+matchPatterns _ [] [] = pure (Just [])
+matchPatterns context (p:ps) (e:es) = do
+    bindings <- matchPattern context p e
+    case bindings of
+        Nothing -> pure Nothing
+        Just bs -> do
+            moreBindings <- matchPatterns context ps es
+            pure ((bs ++) <$> moreBindings)
+matchPatterns _ _ _ = pure Nothing
+
+body :: Context -> String -> [Expr] -> IO (Maybe (FunctionBody, Context))
+body context name args =
+    case lookup name (functions context) of
+        Nothing -> pure Nothing
+        Just (_, clauses) -> select clauses
+  where
+    suspendedArgs = map (`Node` context) args
+
+    select [] = pure Nothing
+    select ((patterns, functionBody):clauses)
+        | length patterns /= length args = select clauses
+        | otherwise = do
+            match <- matchPatterns context patterns suspendedArgs
+            case match of
+                Just bindings ->
+                    pure (Just
+                        ( functionBody
+                        , context { immutables = bindings }
+                        )
+                    )
+                Nothing -> select clauses
+
+
+evaluate :: Expr -> Context -> IO (Maybe Result)
+evaluate Empty _ = pure Nothing
+evaluate (Literal lit) _ = pure (Just (ResultLiteral lit))
 evaluate (Arithmetic op) context = arithmetic op context
 evaluate (Variable name) context =
     case lookup name (variables context) of
@@ -392,9 +471,32 @@ evaluate (Variable name) context =
         Nothing   -> do 
             case lookup name (immutables context) of
                 Just (t, expr) -> evaluate expr context
-                Nothing -> Nothing
+                Nothing -> pure Nothing
 evaluate (Truth op) context = truth op context
 evaluate (Node expr c) _ = evaluate expr c
+evaluate (Call name args) context = do
+    selected <- body context name args
+    case selected of
+        Nothing -> pure Nothing
+        Just (FunctionBody _ statements returnExpr, callContext) -> do
+            finalContext <- execute statements callContext
+            evaluate returnExpr finalContext
+-- doesn't actually evaluate anything, it just type checks with best guess!
+evaluate (Construct name fields) context = do
+    check <- lookup name (constructors context)
+    pure $ case check of
+        Nothing -> Nothing
+        Just (Con _ types) ->
+            if length types /= length fields then Nothing
+            else do 
+                let fieldTypes = map (guess context) fields
+                if and (zipWith typeMatch types fieldTypes) then Just (ResultConstruct name fields)
+                else do
+                    putStrLn $ "Type mismatch in constructor: " ++ name
+                    Nothing
+
+
+
 evaluate _ _ = undefined
 
 -- basically just makes all variables immutable within the inner context#
@@ -415,12 +517,22 @@ update name (t, expr) context =
         | key == name = (key, (t, storedExpr)) : rest
         | otherwise   = (key, oldValue) : go rest
 
+updatefunction :: String -> (Type, [([Pattern], FunctionBody)]) -> Context -> Context
+updatefunction name (t, bodies) context =
+    context { functions = go (functions context) }
+  where
+    go [] = []
+    go ((key, oldValue) : rest)
+        | key == name = (key, (t, bodies)) : rest
+        | otherwise   = (key, oldValue) : go rest
+
 
 execute :: Sequence -> Context -> IO Context
 execute End context = pure context
 execute (Seq Pass rest) context = execute rest context
 execute (Seq (Emit name expr) rest) context = do
-    case evaluate expr context of
+    eval <- evaluate expr context
+    case eval of
         Just (ResultLiteral lit) -> putStrLn $ name ++ ": " ++ show lit
         Just (ResultConstruct con fields) -> putStrLn $ name ++ ": " ++ con ++ " " ++ show fields
         Nothing -> putStrLn $ name ++ ": " ++ "failed to emit expression"
@@ -433,10 +545,25 @@ execute (Seq (Assignment name expr) rest) context = do
         putStrLn $ "Type mismatch in assignment to variable: " ++ name
         execute rest context
 
---while :: Context -> Expr -> Sequence -> Context
+
+
+execute (Seq (FunctionDec t name patterns (FunctionBody parameters body returnExpr)) rest) context = do
+    let check = lookup name (functions context)
+    case check of 
+        Just (existingType, existingBodies) -> do
+            if typeMatch t existingType then do
+                let context' = updatefunction name (t, existingBodies ++ [(patterns, FunctionBody parameters body returnExpr)]) context
+                execute rest context'
+            else do
+                putStrLn $ "Type mismatch in function declaration: " ++ name
+                execute rest context
+        Nothing -> do
+            let context' = context { functions = (name, (t, [(patterns, FunctionBody parameters body returnExpr)])) : functions context }
+            execute rest context'
 
 execute (Seq (Loop condition iterator (Seq f n)) _) context = do
-    case evaluate condition context of
+    eval <- evaluate condition context
+    case eval of
         Just (ResultLiteral (BooleanLiteral True)) -> do
             context' <- execute (Seq f n) context
             context'' <- execute (Seq iterator End) context'
@@ -456,8 +583,9 @@ execute (Seq (Declare (VariableDec t name assignment)) rest) context = do
     execute rest newContext
 execute (Seq (If condition thenExpr elseExpr) rest) context =
     case condition of
-        Truth truthy ->
-            case truth truthy context of
+        Truth truthy -> do
+            eval <- truth truthy context
+            case eval of
                 Just (ResultLiteral (BooleanLiteral True)) -> do
                     context' <- execute thenExpr context
                     execute rest context'
@@ -488,8 +616,6 @@ exampleTree = Arithmetic (AddOp
     (ArithmeticValue (Variable "test"))
     (ArithmeticValue (Literal (FloatLiteral 9.5))))
 
-exampleResult :: Maybe Result
-exampleResult = evaluate exampleTree exampleContext
 
 exampleProgram :: Sequence
 exampleProgram =
@@ -533,3 +659,27 @@ exampleLoop =
             )
         )
     End
+
+exampleFunctionProgram :: Sequence
+exampleFunctionProgram =
+    Seq
+        (FunctionDec
+            (Basic Int)
+            "increment"
+            [Binding "x"]
+            (FunctionBody
+                [Just "x"]
+                End
+                (Arithmetic (AddOp
+                    (ArithmeticValue (Variable "x"))
+                    (ArithmeticValue (Literal (IntegerLiteral 1)))))
+            )
+        )
+        (Seq
+            (Emit "sum"
+                (Arithmetic (AddOp
+                    (ArithmeticValue
+                        (Call "increment" [Literal (IntegerLiteral 3)]))
+                    (ArithmeticValue
+                        (Call "increment" [Literal (IntegerLiteral 4)])))))
+            End)
