@@ -483,18 +483,16 @@ evaluate (Call name args) context = do
             evaluate returnExpr finalContext
 -- doesn't actually evaluate anything, it just type checks with best guess!
 evaluate (Construct name fields) context = do
-    check <- lookup name (constructors context)
-    pure $ case check of
-        Nothing -> Nothing
+    case lookup name (constructors context) of
+        Nothing -> pure Nothing
         Just (Con _ types) ->
-            if length types /= length fields then Nothing
+            if length types /= length fields then pure Nothing
             else do 
                 let fieldTypes = map (guess context) fields
-                if and (zipWith typeMatch types fieldTypes) then Just (ResultConstruct name fields)
+                if and (zipWith typeMatch types fieldTypes) then pure (Just (ResultConstruct name fields))
                 else do
                     putStrLn $ "Type mismatch in constructor: " ++ name
-                    Nothing
-
+                    pure Nothing
 
 
 evaluate _ _ = undefined
@@ -581,6 +579,16 @@ execute (Seq (For (VariableDec t name assignment) condition iterator body) rest)
 execute (Seq (Declare (VariableDec t name assignment)) rest) context = do
     let newContext = context { variables = (name, (t, assignment)) : variables context }
     execute rest newContext
+execute (Seq (Declare (TypeDec name typeVars cons)) rest) context = do
+    case lookup name (types context) of
+        Just _ -> do
+            putStrLn $ "Type " ++ name ++ " already declared"
+            execute rest context
+        Nothing -> do
+            let newContext = context { types = (name, cons) : types context
+                    ,constructors = [(cn, con) | con@(Con cn _) <- cons] ++ constructors context
+                }
+            execute rest newContext
 execute (Seq (If condition thenExpr elseExpr) rest) context =
     case condition of
         Truth truthy -> do
@@ -608,6 +616,7 @@ exampleContext = Context
     { variables = [("test", ((Basic Int), Literal (IntegerLiteral 3)))]
     , immutables = []
     , functions = []
+    , constructors = []
     , types = []
     }
 
@@ -683,3 +692,43 @@ exampleFunctionProgram =
                     (ArithmeticValue
                         (Call "increment" [Literal (IntegerLiteral 4)])))))
             End)
+
+exampleFactorialProgram :: Sequence
+exampleFactorialProgram =
+    Seq
+        (FunctionDec
+            (Basic Int)
+            "factorial"
+            [LiteralPattern (IntegerLiteral 0)]
+            (FunctionBody
+                [Nothing]
+                End
+                (Literal (IntegerLiteral 1))
+            )
+        )
+        (Seq
+            (FunctionDec
+                (Basic Int)
+                "factorial"
+                [Binding "n"]
+                (FunctionBody
+                    [Just "n"]
+                    End
+                    (Arithmetic (MultiplyOp
+                        (ArithmeticValue (Variable "n"))
+                        (ArithmeticValue (Call "factorial"
+                            [Arithmetic (SubOp
+                                (ArithmeticValue (Variable "n"))
+                                (ArithmeticValue (Literal (IntegerLiteral 1)))
+                            )])
+                        )
+                    ))
+                )
+            )
+            (Seq
+                (Emit "factorial of 5"
+                    (Call "factorial" [Literal (IntegerLiteral 5)])
+                )
+                End
+            )
+        )
