@@ -11,7 +11,7 @@ data BaseType = Str | Boolean | Num | Int | Float | Any
 
 data Type
     = Basic BaseType
-    | TypeVariable String -- unused
+    | TypeVariable String
     | Defined String [Type]
     deriving (Show)
 
@@ -100,6 +100,10 @@ equality _ _ _ = pure False
 
 
 typeMatch :: Type -> Type -> Bool
+typeMatch (Basic Any) _ = True
+typeMatch _ (Basic Any) = True
+typeMatch (Basic Int)   (Basic Num) = True
+typeMatch (Basic Float) (Basic Num) = True
 typeMatch (Basic b1) (Basic b2) = b1 == b2
 typeMatch (Defined n1 _) (Defined n2 _) = n1 == n2
 typeMatch _ _ = False
@@ -143,6 +147,16 @@ guess context (Variable name) = case variable name context of
 guess context (Call name _) = case lookup name (functions context) of
     Just (t, _) -> t
     Nothing -> Basic Any
+-- figure this out properly later
+guess context (Construct name _) = 
+    case [ typeName
+        | (typeName, cons) <- types context
+        , Con name _ <- cons
+        , name == name
+        ] of
+        typeName : _ -> Defined typeName []
+        []            -> Basic Any
+guess context (Arithmetic (ArithmeticValue v)) = guess context v
 guess _ (Arithmetic _) = Basic Num
 guess _ (Truth _) = Basic Boolean
 guess _ _ = Basic Any
@@ -494,13 +508,16 @@ evaluate (Construct name fields) context = do
     case lookup name (constructors context) of
         Nothing -> pure Nothing
         Just (Con _ types) ->
-            if length types /= length fields then pure Nothing
-            else do 
-                let fieldTypes = map (guess context) fields
-                if and (zipWith typeMatch types fieldTypes) then pure (Just (ResultConstruct name fields))
-                else do
-                    putStrLn $ "Type mismatch in constructor: " ++ name
-                    pure Nothing
+            let actualTypes = map (guess context) fields
+                matches = zipWith typeMatch types actualTypes
+            in if length types == length fields && and matches
+            then pure (Just (ResultConstruct name fields))
+            else do
+                putStrLn $ "Constructor " ++ name
+                    ++ "\n  expected: " ++ show types
+                    ++ "\n  inferred: " ++ show actualTypes
+                    ++ "\n  matches:  " ++ show matches
+                pure Nothing
 
 
 evaluate _ _ = undefined

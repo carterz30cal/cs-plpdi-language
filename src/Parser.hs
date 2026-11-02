@@ -124,6 +124,7 @@ valueExpr = choice
         integerOrFloat,
         bool,
         call,
+        inhale,
         variable
     ]
 
@@ -230,10 +231,10 @@ expr :: Parser Expr
 expr = lexeme $ choice
     [ 
         truthParse,
-        arithmeticParse,
-        inhale,
-        call,
         construct,
+        arithmeticParse,
+        call,
+        inhale,
         nullExpr,
         variable
     ]

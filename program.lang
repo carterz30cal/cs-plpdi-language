@@ -17,3 +17,10 @@ num function fibontwo n = {
 }
 
 emit "result2" fibontwo(testing);
+
+type list any = Empty or Cons(any, list[any]);
+list[any] function sample = Cons[1, Cons[2, Empty]];
+any function head Cons[x,_] = x;
+list[any] function tail Cons[_,xs] = xs; 
+
+emit "listtest" head(tail(sample()));
