@@ -11,7 +11,7 @@ program :: Text
 program = "pass; let num test = 6; emit \"val\" test;"
 
 fibonacci :: Text
-fibonacci = "num function fibonacci 0 = 1;num function fibonacci 1 = 1;num function fibonacci x = fibonacci(x-1) + fibonacci(x - 2);emit \"result\" fibonacci(5);"
+fibonacci = "num function fibonacci 0 = 0;num function fibonacci 1 = 1;num function fibonacci x = fibonacci(x-1) + fibonacci(x - 2);emit \"result\" fibonacci(5);"
 
 
 main :: IO ()

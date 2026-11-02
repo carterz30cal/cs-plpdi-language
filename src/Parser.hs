@@ -166,10 +166,10 @@ comparison = do
     choice
       [ EqualOp (Arithmetic lhs) <$> (symbol "==" *> expr)
       , NotEqualOp (Arithmetic lhs) <$> (symbol "!=" *> expr)
-      , GreaterThanOp lhs <$> (symbol ">=" *> arithmetic)
-      , GreaterThanEqualOp lhs <$> (symbol ">=" *> arithmetic) -- see note below
-      , LessThanOp lhs <$> (symbol "<" *> arithmetic)
+      , GreaterThanEqualOp lhs <$> (symbol ">=" *> arithmetic)
+      , GreaterThanOp lhs <$> (symbol ">" *> arithmetic) -- see note below
       , LessThanEqualOp lhs <$> (symbol "<=" *> arithmetic)
+      , LessThanOp lhs <$> (symbol "<" *> arithmetic)
       ]
 
 notTruthy =
@@ -181,7 +181,7 @@ notTruthy =
 
 logicAtomic :: Parser (TruthyOperation Expr)
 logicAtomic = 
-    between (symbol "(") (symbol ")") truthy <|> TruthyValue <$> valueExpr
+    between (symbol "(") (symbol ")") truthy <|> TruthyValue <$> bool
 
 
 arithmeticParse :: Parser Expr
@@ -287,12 +287,28 @@ wildcardPatternParser :: Parser Pattern
 wildcardPatternParser = do
     symbol "_"
     pure $ Wildcard
+
 literalPatternParser :: Parser Pattern
-literalPatternParser = undefined
+literalPatternParser = do
+    (Literal lit) <- literal
+    pure $ LiteralPattern lit
+
+
 bindingPatternParser :: Parser Pattern
-bindingPatternParser = undefined
+bindingPatternParser = do
+    name <- identifier
+    pure $ Binding name
+
 constructorPatternParser :: Parser Pattern
-constructorPatternParser = undefined
+constructorPatternParser = try $ do
+    name <- identifier
+    symbol "["
+    args <- optional $ (patternParser `sepBy1` symbol ",")
+    symbol "]"
+    pure $ case args of
+        Just (args') -> ConstructorPattern name args'
+        Nothing -> ConstructorPattern name []
+
 
 patternParser :: Parser Pattern
 patternParser = wildcardPatternParser <|> literalPatternParser <|> constructorPatternParser <|> bindingPatternParser
