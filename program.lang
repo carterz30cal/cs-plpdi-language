@@ -1,0 +1,19 @@
+num function fibonacci 0 = 0;
+num function fibonacci 1 = 1;
+num function fibonacci n = fibonacci (n - 2) + fibonacci (n - 1);
+let num testing = 5;
+emit "result" fibonacci(testing);
+
+num function fibontwo n = {
+    let num r;
+    if (n == 0) {r = 0;}
+    else {
+        if (n == 1) {r = 1;}
+        else {
+            r = fibontwo(n - 2) + fibontwo(n - 1);
+        }
+    }
+    return r;
+}
+
+emit "result2" fibontwo(testing);

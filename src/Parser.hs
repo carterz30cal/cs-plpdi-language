@@ -336,9 +336,9 @@ functionDecParseBody = try $ do -- so it unconsumes the stuff if fails otherwise
     paras <- many patternParser
     _ <- symbol "="
     _ <- symbol "{"
-    body <- langparse `sepBy1` symbol ";"
-    _ <- symbol ";"
-    keyword "return"
+    body <- manyTill
+        langparse
+        (keyword "return")
     rexpr <- expr
     _ <- symbol ";"
     _ <- symbol "}"
@@ -364,6 +364,10 @@ assignmentParse = do
     rhexpr <- expr
     pure $ Assignment vname rhexpr
 
+
+blockParser :: Parser Sequence
+blockParser = between (symbol "{") (symbol "}") collect
+
 forParse :: Parser Statement
 forParse = do
     keyword "for"
@@ -374,10 +378,8 @@ forParse = do
     symbol ","
     iterator <- langparse 
     symbol ")"
-    symbol "{"
-    body <- langparse `sepBy1` symbol ";"
-    symbol "}"
-    pure $ For def condition iterator (toSequence body)
+    body <- blockParser
+    pure $ For def condition iterator body
 
 ifParse :: Parser Statement
 ifParse = do
@@ -385,37 +387,48 @@ ifParse = do
     symbol "("
     condition <- expr
     symbol ")"
-    symbol "{"
-    body <- langparse `sepBy1` symbol ";"
-    symbol "}"
-    other <- optional $ (keyword "else" *> (langparse `sepBy1` symbol ";"))
+    body <- blockParser
+    other <- optional $ (keyword "else" *> blockParser)
     pure $ case other of
-        Just (other') -> If condition (toSequence body) (Just (toSequence other'))
-        Nothing -> If condition (toSequence body) Nothing
+        Just (other') -> If condition body (Just other')
+        Nothing -> If condition body Nothing
 
 
 
+compoundStatement :: Parser Statement
+compoundStatement = choice
+    [ 
+        ifParse,
+        forParse,
+        functionDecParseBody
+    ]
 
-
-
-langparse :: Parser Statement
-langparse = choice
-    [
+simpleStatement :: Parser Statement
+simpleStatement = choice
+    [ 
         passParse,
         declareParse,
         emitParse,
-        ifParse,
-        forParse,
-        functionDecParse,
+        functionDecParseOneLiner,
         assignmentParse
     ]
+
+langparse :: Parser Statement
+langparse =
+    (compoundStatement <* optional (symbol ";"))
+    <|> (simpleStatement <* symbol ";")
 
 collect :: Parser Sequence
 collect = do
     sc
-    statements <- langparse `sepEndBy` symbol ";"
-    eof
-    pure (toSequence statements)
+    atEnd <- optional (lookAhead (void eof <|> void (symbol "}")))
+    case atEnd of
+        Just _  -> pure End
+        Nothing -> do
+            stmt <- compoundStatement
+                <|> (simpleStatement <* symbol ";")
+            rest <- collect
+            pure (Seq stmt rest)
 
 parseProgram :: Text -> Either (ParseErrorBundle Text Void) Sequence
-parseProgram = runParser collect "<input>"
+parseProgram = runParser (collect <* eof) "<input>"
