@@ -13,5 +13,6 @@ main = do
     case parseProgram source of
         Left err  -> putStrLn (errorBundlePretty err)
         Right ast -> do
+            putStrLn (show ast)
             _ <- execute ast exampleContext
             pure ()

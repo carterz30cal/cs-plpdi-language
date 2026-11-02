@@ -290,7 +290,7 @@ wildcardPatternParser = do
     pure $ Wildcard
 
 literalPatternParser :: Parser Pattern
-literalPatternParser = do
+literalPatternParser = try $ do
     (Literal lit) <- literal
     pure $ LiteralPattern lit
 

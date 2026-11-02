@@ -19,8 +19,21 @@ num function fibontwo n = {
 emit "result2" fibontwo(testing);
 
 type list any = Empty or Cons(any, list[any]);
-list[any] function sample = Cons[1, Cons[2, Empty]];
+list[any] function sample = Cons[1, Cons[2, Empty[]]];
+list[num] function ones = Cons[1, ones()];
 any function head Cons[x,_] = x;
 list[any] function tail Cons[_,xs] = xs; 
 
-emit "listtest" head(tail(sample()));
+bool function empty Empty[] = true;
+bool function empty _ = false;
+
+emit "listtest" empty(tail(tail(sample())));
+
+list[any] function push Cons[x,xs] y = Cons[y, Cons[x,xs]];
+
+emit "pushtest" push(sample(), 3);
+
+emit "emptytest" Empty[];
+
+//list[any] function append Empty[] x = Cons[x, Empty[]]
+//list[any] function append Cons[]

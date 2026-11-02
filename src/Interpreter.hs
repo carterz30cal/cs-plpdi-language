@@ -504,20 +504,28 @@ evaluate (Call name args) context = do
             finalContext <- execute statements callContext
             evaluate returnExpr finalContext
 -- doesn't actually evaluate anything, it just type checks with best guess!
-evaluate (Construct name fields) context = do
+evaluate (Construct name fields) context =
     case lookup name (constructors context) of
-        Nothing -> pure Nothing
-        Just (Con _ types) ->
-            let actualTypes = map (guess context) fields
-                matches = zipWith typeMatch types actualTypes
-            in if length types == length fields && and matches
-            then pure (Just (ResultConstruct name fields))
-            else do
-                putStrLn $ "Constructor " ++ name
-                    ++ "\n  expected: " ++ show types
-                    ++ "\n  inferred: " ++ show actualTypes
-                    ++ "\n  matches:  " ++ show matches
-                pure Nothing
+        Nothing ->
+            pure Nothing
+        Just (Con _ expectedTypes)
+            | length expectedTypes /= length fields ->
+                reportMismatch expectedTypes
+            | and (zipWith typeMatch expectedTypes actualTypes) ->
+                let capturedFields = map (`Node` context) fields
+                in pure (Just (ResultConstruct name capturedFields))
+            | otherwise ->
+                reportMismatch expectedTypes
+  where
+    actualTypes = map (guess context) fields
+    reportMismatch expectedTypes = do
+        putStrLn $ unlines
+            [ "Type mismatch in constructor: " ++ name
+            , "  expected: " ++ show expectedTypes
+            , "  inferred: " ++ show actualTypes
+            , "  matches:  " ++ show (zipWith typeMatch expectedTypes actualTypes)
+            ]
+        pure Nothing
 
 
 evaluate _ _ = undefined
@@ -557,7 +565,8 @@ execute (Seq (Emit name expr) rest) context = do
     eval <- evaluate expr context
     case eval of
         Just (ResultLiteral lit) -> putStrLn $ name ++ ": " ++ show lit
-        Just (ResultConstruct con fields) -> putStrLn $ name ++ ": " ++ con ++ " " ++ show fields
+        Just (ResultConstruct con fields) ->
+            putStrLn $ name ++ ": " ++ con ++ " (" ++ show (length fields) ++ " fields)"
         Nothing -> putStrLn $ name ++ ": " ++ "failed to emit expression"
     execute rest context -- not proper input/output but i think this is good enough as a demo
 execute (Seq (Assignment name expr) rest) context = do
