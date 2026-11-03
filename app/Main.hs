@@ -9,7 +9,7 @@ import Interpreter (execute, exampleContext)
 
 main :: IO ()
 main = do
-    source <- TIO.readFile "program.lang"
+    source <- TIO.readFile "program.otwo"
     case parseProgram source of
         Left err  -> putStrLn (errorBundlePretty err)
         Right ast -> do
