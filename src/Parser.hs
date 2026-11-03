@@ -377,7 +377,7 @@ forParse = do
     symbol ","
     condition <- expr -- replace with explicit truth expr, cannot parse anything else and remain in a good state
     symbol ","
-    iterator <- assignmentParse
+    iterator <- assignmentLike
     symbol ")"
     body <- blockParser
     pure $ For def condition iterator body
@@ -394,6 +394,48 @@ ifParse = do
         Just (other') -> If condition body (Just other')
         Nothing -> If condition body Nothing
 
+assignmentLike :: Parser Statement
+assignmentLike = try sugarPlusAssignment 
+            <|> try sugarMinusAssignment
+            <|> try sugarMultAssignment
+            <|> try sugarDivAssignment
+            <|> try sugarModAssignment
+            <|> assignmentParse
+
+sugarPlusAssignment :: Parser Statement
+sugarPlusAssignment = do
+    vname <- identifier
+    symbol "+="
+    rhexpr <- arithmetic
+    pure $ Assignment vname (Arithmetic (AddOp (ArithmeticValue (Variable vname)) rhexpr))
+
+sugarMinusAssignment :: Parser Statement
+sugarMinusAssignment = do
+    vname <- identifier
+    symbol "-="
+    rhexpr <- arithmetic
+    pure $ Assignment vname (Arithmetic (SubOp (ArithmeticValue (Variable vname)) rhexpr))
+
+sugarMultAssignment :: Parser Statement
+sugarMultAssignment = do
+    vname <- identifier
+    symbol "*="
+    rhexpr <- arithmetic
+    pure $ Assignment vname (Arithmetic (MultiplyOp (ArithmeticValue (Variable vname)) rhexpr))
+
+sugarDivAssignment :: Parser Statement
+sugarDivAssignment = do
+    vname <- identifier
+    symbol "/="
+    rhexpr <- arithmetic
+    pure $ Assignment vname (Arithmetic (DivideOp (ArithmeticValue (Variable vname)) rhexpr))
+
+sugarModAssignment :: Parser Statement
+sugarModAssignment = do
+    vname <- identifier
+    symbol "%="
+    rhexpr <- arithmetic
+    pure $ Assignment vname (Arithmetic (ModuloOp (ArithmeticValue (Variable vname)) rhexpr))
 
 
 compoundStatement :: Parser Statement
@@ -411,7 +453,7 @@ simpleStatement = choice
         declareParse,
         emitParse,
         functionDecParseOneLiner,
-        assignmentParse
+        assignmentLike
     ]
 
 langparse :: Parser Statement

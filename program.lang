@@ -57,7 +57,7 @@ num function add x y = x + y;
 list[any] function map f xs = {
     let any ys = Empty[];
     if (xs != Empty) {
-        for (let num i = 0, i < length(xs), i = i + 1) {
+        for (let num i = 0, i < length(xs), i += 1) {
             ys = append(f(at(xs,i)), ys);
         }
     }
