@@ -1,4 +1,5 @@
 #import "examples/list.otwo"
+#import "examples/dict.otwo"
 
 num function fibonacci 0 = 0;
 num function fibonacci 1 = 1;
@@ -49,3 +50,6 @@ emit "combine" reduce(add(), sample());
 let list[any] huh = Cons[1,2];
 emit "shouldn't work" huh;
 //emit "error?" err;
+
+let dict[str,any] testdict = Dict["ex1", 3, EmptyDict[]]; 
+emit "lookup" find("ex1", testdict);

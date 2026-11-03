@@ -1,0 +1,18 @@
+/*
+The worst possible implementation of a dictionary, with O(n) lookup time (yikes!)
+*/
+
+#import "maybe.otwo"
+type dict any any = EmptyDict or Dict(any, any, dict[any,any]);
+
+maybe[any] function find k EmptyDict[] = Nothing[];
+maybe[any] function find k Dict[key, val, ds] = {
+    let any result;
+    if (k == key) {
+        result = val;
+    }
+    else {
+        result = find(k, ds);
+    }
+    return result;
+}
