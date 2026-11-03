@@ -71,7 +71,7 @@ data Expr
     | Node Expr Context
     | Call String [Expr]
     | Construct String [Expr]
-    | Inhale String
+    | Inhale String -- unsafe???
     | Arithmetic (ArithmeticOperation Expr)
     | Truth (TruthyOperation Expr)
     | Empty
@@ -80,6 +80,7 @@ data Expr
 data Result
     = ResultLiteral Literal
     | ResultConstruct String [Expr]
+    | ResultPartialFunc String [Expr]
     deriving (Show)
 
 equality :: Maybe Result -> Maybe Result -> Context -> IO Bool
@@ -160,6 +161,12 @@ guess context (Arithmetic (ArithmeticValue v)) = guess context v
 guess _ (Arithmetic _) = Basic Num
 guess _ (Truth _) = Basic Boolean
 guess _ _ = Basic Any
+
+freeze :: Context -> Expr -> Expr
+freeze _ lit@(Literal l) = lit
+freeze _ Empty = Empty
+freeze _ inh@(Inhale input) = inh
+freeze context expr = Node expr context
 
 -- A function clause has its own patterns and a final return expression.
 -- Repeated FunctionDec nodes retain source order for pattern matching.
@@ -466,7 +473,7 @@ body context name args =
         Nothing -> pure Nothing
         Just (_, clauses) -> select clauses
   where
-    suspendedArgs = map (`Node` context) args
+    suspendedArgs = map (freeze context) args
 
     select [] = pure Nothing
     select ((patterns, functionBody):clauses)
@@ -483,6 +490,34 @@ body context name args =
                 Nothing -> select clauses
 
 
+funclength :: String -> Context -> Maybe Int
+funclength name context = case lookup name (functions context) of
+    Just (_, (patterns, _):_) -> Just (length patterns)
+    _ -> Nothing
+
+invoke :: String -> [Expr] -> Context -> IO (Maybe Result)
+invoke name args context = do
+    select <- body context name args
+    case select of 
+        Nothing -> pure Nothing
+        Just (FunctionBody _ statements rexpr, callContext) -> do
+            fcontext <- execute statements callContext
+            evaluate rexpr fcontext
+
+partial :: Maybe Result -> [Expr] -> Context -> IO (Maybe Result)
+partial (Just (ResultPartialFunc name pargs)) args context = 
+    case funclength name context of
+        Just flen
+            | length combined < flen ->
+                pure (Just (ResultPartialFunc name combined))
+            | length combined == flen ->
+                invoke name combined context
+            | otherwise ->
+                pure Nothing
+        where
+            combined = pargs ++ map (freeze context) args
+partial _ _ _ = pure Nothing
+
 evaluate :: Expr -> Context -> IO (Maybe Result)
 evaluate Empty _ = pure Nothing
 evaluate (Literal lit) _ = pure (Just (ResultLiteral lit))
@@ -496,13 +531,26 @@ evaluate (Variable name) context =
                 Nothing -> pure Nothing
 evaluate (Truth op) context = truth op context
 evaluate (Node expr c) _ = evaluate expr c
-evaluate (Call name args) context = do
-    selected <- body context name args
-    case selected of
-        Nothing -> pure Nothing
-        Just (FunctionBody _ statements returnExpr, callContext) -> do
-            finalContext <- execute statements callContext
-            evaluate returnExpr finalContext
+
+evaluate (Call name args) context = 
+    case funclength name context of
+        Nothing -> do
+            -- basically just checking if we've stored a partial call
+            case variable name context of
+                Just(_, expr) -> do
+                    val <- evaluate expr context
+                    case val of
+                        Just (ResultPartialFunc _ _) -> partial val args context
+                        _ -> pure Nothing
+                _ -> pure Nothing
+        Just flen
+            | length args < flen ->
+                pure (Just (ResultPartialFunc name (map (freeze context) args)))
+            | length args > flen -> 
+                pure Nothing
+            | otherwise ->
+                invoke name args context
+
 -- doesn't actually evaluate anything, it just type checks with best guess!
 evaluate (Construct name fields) context =
     case lookup name (constructors context) of
@@ -530,10 +578,6 @@ evaluate (Construct name fields) context =
 
 evaluate _ _ = undefined
 
--- basically just makes all variables immutable within the inner context#
--- function calls need to clear the immutables/variables that are not present in scope
-freeze :: Context -> Context
-freeze context = context { immutables = variables context ++ immutables context, variables = [] }
 
 remove :: String -> Context -> Context
 remove name context = context { variables = filter (\(n, _) -> n /= name) (variables context) }
@@ -567,6 +611,8 @@ execute (Seq (Emit name expr) rest) context = do
         Just (ResultLiteral lit) -> putStrLn $ name ++ ": " ++ show lit
         Just (ResultConstruct con fields) ->
             putStrLn $ name ++ ": " ++ con ++ " (" ++ show (length fields) ++ " fields)"
+        Just (ResultPartialFunc name' args) ->
+            putStrLn $ name ++ ": partial function " ++ name' ++ " (" ++ show (length args) ++ " arguments supplied)"
         Nothing -> putStrLn $ name ++ ": " ++ "failed to emit expression"
     execute rest context -- not proper input/output but i think this is good enough as a demo
 execute (Seq (Assignment name expr) rest) context = do

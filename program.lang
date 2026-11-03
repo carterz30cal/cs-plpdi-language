@@ -37,3 +37,7 @@ emit "emptytest" Empty[];
 
 //list[any] function append Empty[] x = Cons[x, Empty[]]
 //list[any] function append Cons[]
+
+let any pfunc = head();
+emit "partialtest" pfunc;
+emit "applytest" pfunc(sample());
