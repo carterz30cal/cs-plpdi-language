@@ -377,7 +377,7 @@ forParse = do
     symbol ","
     condition <- expr -- replace with explicit truth expr, cannot parse anything else and remain in a good state
     symbol ","
-    iterator <- langparse 
+    iterator <- assignmentParse
     symbol ")"
     body <- blockParser
     pure $ For def condition iterator body

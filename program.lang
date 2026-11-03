@@ -38,6 +38,30 @@ emit "emptytest" Empty[];
 //list[any] function append Empty[] x = Cons[x, Empty[]]
 //list[any] function append Cons[]
 
+num function length Empty[] = 0;
+num function length xs = 1 + length(tail(xs));
+
 let any pfunc = head();
 emit "partialtest" pfunc;
 emit "applytest" pfunc(sample());
+
+list[any] function append x Empty[] = Cons[x, Empty[]];
+list[any] function append x Cons[y,ys] = Cons[y,append(x,ys)]; 
+
+any function at Cons[x,_] 0 = x;
+any function at Cons[_,xs] n = at(xs, n - 1); 
+
+num function increment x = x + 1;
+
+
+list[any] function map f xs = {
+    let any ys = Empty[];
+    if (xs != Empty) {
+        for (let num i = 0, i < length(xs), i = i + 1) {
+            ys = append(f(at(xs,i)), ys);
+        }
+    }
+    return ys;
+}
+
+emit "mapping" head(map(increment(), sample()));
