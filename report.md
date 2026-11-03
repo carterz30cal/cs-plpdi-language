@@ -31,8 +31,11 @@ Please see program.lang for an implementation of several common functions used i
 
 ## AI
 This project was made with some AI usage! The syntax was written entirely by hand, with some AI assistance in discovering typos and inconsistencies. 
+
 The interpreter has some AI involvement, as I got further into the insanity of monads I found myself debugging with GPT-6 a fair bit. However the code was still majority written by myself, besides some smaller helper functions.
+
 The parser had the most involvement, as it also delves into monad use a fair bit and I'll admit I didn't have the best understanding of this section of Haskell, as well as using an entirely new library for the first time! 
+
 The report is entirely hand-written, and hasn't touched an AI. 
 
 ## Collaboration
