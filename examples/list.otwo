@@ -24,6 +24,8 @@ any function at Cons[_,xs] n = at(xs, n - 1);
 // modifier functions
 list[any] function append x Empty[] = Cons[x, Empty[]];
 list[any] function append x Cons[y,ys] = Cons[y, append(x,ys)];
+list[any] function prepend x Empty[] = Cons[x, Empty[]];
+list[any] function prepend x ys = Cons[x, ys];
 
 list[any] function map f xs = {
     let list[any] ys = Empty[];
@@ -33,4 +35,15 @@ list[any] function map f xs = {
         }
     } 
     return ys;
+}
+
+/*
+the parameter f must be a partial function that can take two arguments
+of type any (or at least accept the type being passed). the function will
+not be called on a list with a single element.
+*/
+any function reduce f Empty[] = null;
+any function reduce f Cons[x, Empty[]] = x;
+any function reduce f Cons[x, xs] = {
+    return f(x, combine(f, xs));
 }

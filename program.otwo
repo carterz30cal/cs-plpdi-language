@@ -20,60 +20,27 @@ num function fibontwo n = {
 
 emit "result2" fibontwo(testing);
 
-type list any = Empty or Cons(any, list[any]);
 list[any] function sample = Cons[1, Cons[2, Empty[]]];
 list[num] function ones = Cons[1, ones()];
-any function head Cons[x,_] = x;
-list[any] function tail Cons[_,xs] = xs; 
-
-bool function empty Empty[] = true;
-bool function empty _ = false;
 
 emit "listtest" empty(tail(tail(sample())));
 
-list[any] function push Cons[x,xs] y = Cons[y, Cons[x,xs]];
-
-emit "pushtest" push(sample(), 3);
+emit "pushtest" prepend(sample(), 3);
 
 emit "emptytest" Empty[];
 
-//list[any] function append Empty[] x = Cons[x, Empty[]]
-//list[any] function append Cons[]
-
-num function length Empty[] = 0;
-num function length xs = 1 + length(tail(xs));
 
 let any pfunc = head();
 emit "partialtest" pfunc;
 emit "applytest" pfunc(sample());
 
-list[any] function append x Empty[] = Cons[x, Empty[]];
-list[any] function append x Cons[y,ys] = Cons[y,append(x,ys)]; 
-
-any function at Cons[x,_] 0 = x;
-any function at Cons[_,xs] n = at(xs, n - 1); 
 
 num function increment x = x + 1;
 num function add x y = x + y;
 
-list[any] function map f xs = {
-    let any ys = Empty[];
-    if (xs != Empty) {
-        for (let num i = 0, i < length(xs), i += 1) {
-            ys = append(f(at(xs,i)), ys);
-        }
-    }
-    return ys;
-}
-// f - function must take two arguments x y
-any function combine f Cons[x,Cons[y,Empty[]]] = f(x,y);
-any function combine f Cons[x,xs] = {
-    return f(x, combine(f, xs));
-}
-
 emit "mapping" head(map(increment(), sample()));
 emit "label" (1 + 1);
-emit "combine" combine(add(), sample());
+emit "combine" reduce(add(), sample());
 
 //emit "inhaleTest" inhale "hi";
 
