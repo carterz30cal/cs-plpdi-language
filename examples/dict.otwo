@@ -9,7 +9,7 @@ maybe[any] function find k EmptyDict[] = Nothing[];
 maybe[any] function find k Dict[key, val, ds] = {
     let any result;
     if (k == key) {
-        result = val;
+        result = Just[val];
     }
     else {
         result = find(k, ds);
