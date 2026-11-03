@@ -568,8 +568,16 @@ execute (Seq (For (VariableDec t name assignment) condition iterator body) rest)
     execute rest (remove name context')
 
 execute (Seq (Declare (VariableDec t name assignment)) rest) context = do
-    let newContext = context { variables = (name, (t, assignment)) : variables context }
-    execute rest newContext
+    let actual = guess context assignment
+    if typeMatch actual t || cancast actual t
+        then do
+            let newContext =
+                    context { variables = (name, (t, assignment)) : variables context }
+            execute rest newContext
+        else do
+            putStrLn $ "Type mismatch in declaration of " ++ name
+                ++ ": expected " ++ show t ++ ", got " ++ show actual
+            execute rest context
 execute (Seq (Declare (TypeDec name typeVars cons)) rest) context = do
     case lookup name (types context) of
         Just _ -> do

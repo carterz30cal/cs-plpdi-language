@@ -74,3 +74,6 @@ emit "label" (1 + 1);
 emit "combine" combine(add(), sample());
 
 emit "inhaleTest" inhale "hi";
+
+let num err = "this shouldn't work";
+emit "error?" err;
