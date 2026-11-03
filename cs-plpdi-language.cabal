@@ -59,7 +59,7 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  Interpreter, Parser
+    exposed-modules:  Interpreter, Parser, Syntax
 
     -- Modules included in this library but not exported.
     -- other-modules:

@@ -6,82 +6,12 @@ module Interpreter (execute,
     TruthyOperation(..),
     Declaration(..), guess, exampleFactorialProgram, exampleContext) where
 
-data BaseType = Str | Boolean | Num | Int | Float | Any
-    deriving (Eq, Show)
-
-data Type
-    = Basic BaseType
-    | TypeVariable String
-    | Defined String [Type]
-    deriving (Show)
-
-data Literal
-    = StringLiteral String
-    | IntegerLiteral Integer
-    | FloatLiteral Double
-    | BooleanLiteral Bool
-    deriving (Eq, Show)
-
-data Constructor = Con String [Type]
-    deriving (Show)
-
-data Declaration
-    = VariableDec Type String Expr
-    | TypeDec String [String] [Constructor]
-    deriving (Show)
-
-
-data Pattern
-    = Wildcard
-    | Binding String
-    | LiteralPattern Literal
-    | ConstructorPattern String [Pattern]
-    deriving (Show)
-
-
-data ArithmeticOperation a
-    = ArithmeticValue a
-    | AddOp (ArithmeticOperation a) (ArithmeticOperation a)
-    | SubOp (ArithmeticOperation a) (ArithmeticOperation a)
-    | MultiplyOp (ArithmeticOperation a) (ArithmeticOperation a)
-    | DivideOp (ArithmeticOperation a) (ArithmeticOperation a)
-    | PowOp (ArithmeticOperation a) (ArithmeticOperation a)
-    | ModuloOp (ArithmeticOperation a) (ArithmeticOperation a)
-    | NegateOp (ArithmeticOperation a)
-    deriving (Show)
-
-data TruthyOperation a
-    = TruthyValue a
-    | AndOp (TruthyOperation a) (TruthyOperation a)
-    | OrOp (TruthyOperation a) (TruthyOperation a)
-    | NotOp (TruthyOperation a)
-    | EqualOp a a
-    | NotEqualOp a a
-    | GreaterThanOp (ArithmeticOperation a) (ArithmeticOperation a)
-    | GreaterThanEqualOp (ArithmeticOperation a) (ArithmeticOperation a)
-    | LessThanOp (ArithmeticOperation a) (ArithmeticOperation a)
-    | LessThanEqualOp (ArithmeticOperation a) (ArithmeticOperation a)
-    deriving (Show)
-
--- Expressions produce values. A Call has a list of arguments; Construct
--- holds expressions for constructor fields, including lazy fields.
-data Expr
-    = Literal Literal
-    | Variable String
-    | Node Expr Context
-    | Call String [Expr]
-    | Construct String [Expr]
-    | Inhale String -- unsafe???
-    | Arithmetic (ArithmeticOperation Expr)
-    | Truth (TruthyOperation Expr)
-    | Empty
-    deriving (Show)
--- simmers expressions down into a subset of options which can be worked on
-data Result
-    = ResultLiteral Literal
-    | ResultConstruct String [Expr]
-    | ResultPartialFunc String [Expr]
-    deriving (Show)
+import Syntax
+import Text.Megaparsec (errorBundlePretty)
+import System.IO (hFlush, stdout)
+import System.IO.Unsafe (unsafePerformIO)
+import qualified Data.Text as Txt
+import qualified Parser (parseExpr)
 
 equality :: Maybe Result -> Maybe Result -> Context -> IO Bool
 equality (Just (ResultLiteral l1)) (Just (ResultLiteral l2)) _ = pure (l1 == l2)
@@ -167,36 +97,6 @@ freeze _ lit@(Literal l) = lit
 freeze _ Empty = Empty
 freeze _ inh@(Inhale input) = inh
 freeze context expr = Node expr context
-
--- A function clause has its own patterns and a final return expression.
--- Repeated FunctionDec nodes retain source order for pattern matching.
-data FunctionBody = FunctionBody [Maybe String] Sequence Expr
-    deriving (Show)
-
-data Statement
-    = Pass
-    | Declare Declaration
-    | FunctionDec Type String [Pattern] FunctionBody
-    | Emit String Expr
-    | Assignment String Expr
-    | For Declaration Expr Statement Sequence
-    | Loop Expr Statement Sequence
-    | If Expr Sequence (Maybe Sequence)
-    | Block [Statement]
-    deriving (Show)
-
-data Sequence = Seq Statement Sequence | End
-    deriving (Show)
-
-
-data Context = Context
-    { variables :: [(String, (Type, Expr))]
-    , immutables :: [(String, (Type, Expr))]
-    , functions :: [(String, (Type, [([Pattern], FunctionBody)]))]
-    , constructors :: [(String, Constructor)]
-    , types :: [(String, [Constructor])]
-    }
-    deriving (Show)
 
 variable :: String -> Context -> Maybe (Type, Expr)
 variable name context =
@@ -518,6 +418,12 @@ partial (Just (ResultPartialFunc name pargs)) args context =
             combined = pargs ++ map (freeze context) args
 partial _ _ _ = pure Nothing
 
+unsafeInhale :: String -> String
+unsafeInhale prompt = unsafePerformIO $ do
+    putStr prompt
+    hFlush stdout
+    getLine
+
 evaluate :: Expr -> Context -> IO (Maybe Result)
 evaluate Empty _ = pure Nothing
 evaluate (Literal lit) _ = pure (Just (ResultLiteral lit))
@@ -531,6 +437,11 @@ evaluate (Variable name) context =
                 Nothing -> pure Nothing
 evaluate (Truth op) context = truth op context
 evaluate (Node expr c) _ = evaluate expr c
+evaluate (Inhale label) context = 
+    let v = Txt.pack (unsafeInhale label)
+    in case Parser.parseExpr v of
+        Left err -> error (errorBundlePretty err)
+        Right expr -> evaluate expr context
 
 evaluate (Call name args) context = 
     case funclength name context of

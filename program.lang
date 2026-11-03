@@ -52,7 +52,7 @@ any function at Cons[x,_] 0 = x;
 any function at Cons[_,xs] n = at(xs, n - 1); 
 
 num function increment x = x + 1;
-
+num function add x y = x + y;
 
 list[any] function map f xs = {
     let any ys = Empty[];
@@ -63,5 +63,14 @@ list[any] function map f xs = {
     }
     return ys;
 }
+// f - function must take two arguments x y
+any function combine f Cons[x,Cons[y,Empty[]]] = f(x,y);
+any function combine f Cons[x,xs] = {
+    return f(x, combine(f, xs));
+}
 
 emit "mapping" head(map(increment(), sample()));
+emit "label" (1 + 1);
+emit "combine" combine(add(), sample());
+
+emit "inhaleTest" inhale "hi";

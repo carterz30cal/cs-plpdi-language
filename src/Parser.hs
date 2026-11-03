@@ -1,14 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser (parseProgram) where
+module Parser (parseProgram, parseExpr) where
 
 import Control.Applicative (empty, (<|>))
 import Control.Monad (void)
 import Control.Monad.Combinators.Expr
 import Data.Text (Text)
 import Data.Void (Void)
-import Interpreter (Expr(..), Literal(..), Statement(..), Sequence(..), Declaration(..), Constructor(..), Pattern(..)
-                        ,Type(..), BaseType(..), FunctionBody(..), ArithmeticOperation(..), TruthyOperation(..))
+import Syntax
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
@@ -230,12 +229,13 @@ nullExpr = do
 expr :: Parser Expr
 expr = lexeme $ choice
     [ 
-        truthParse,
+        inhale,
+        try truthParse,
         construct,
         arithmeticParse,
         call,
-        inhale,
         nullExpr,
+        literal,
         variable
     ]
 
@@ -433,3 +433,6 @@ collect = do
 
 parseProgram :: Text -> Either (ParseErrorBundle Text Void) Sequence
 parseProgram = runParser (collect <* eof) "<input>"
+
+parseExpr :: Text -> Either (ParseErrorBundle Text Void) Expr
+parseExpr = runParser (sc *> expr <* eof) "<inhale>"
