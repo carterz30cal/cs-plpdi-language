@@ -1,0 +1,36 @@
+/*
+LIST DEFINITION
+AUTHOR: carterz30cal
+VERSION: 1
+SINCE: 1.0.0
+documentation placeholder
+*/
+
+type list any = Empty or Cons(any, list[any]);
+
+// head/tail functions
+any function head Cons[x,_] = x;
+list[any] function tail Cons[_,xs] = xs;
+
+// property functions
+bool function empty Empty[] = true;
+bool function empty _ = false;
+num function length Empty[] = 0;
+num function length Cons[_,xs] = 1 + length(xs);
+any function at Empty[] = null; // if ever evaluated, will error.
+any function at Cons[x,_] 0 = x;
+any function at Cons[_,xs] n = at(xs, n - 1);
+
+// modifier functions
+list[any] function append x Empty[] = Cons[x, Empty[]];
+list[any] function append x Cons[y,ys] = Cons[y, append(x,ys)];
+
+list[any] function map f xs = {
+    let list[any] ys = Empty[];
+    if (xs != Empty[]) {
+        for (let num i = 0, i < length(xs), i += 1) {
+            ys = append(f(at(xs,i)), ys);
+        }
+    } 
+    return ys;
+}

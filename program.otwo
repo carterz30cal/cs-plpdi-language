@@ -1,3 +1,5 @@
+#import "examples/list.otwo"
+
 num function fibonacci 0 = 0;
 num function fibonacci 1 = 1;
 num function fibonacci n = fibonacci (n - 2) + fibonacci (n - 1);
@@ -73,7 +75,10 @@ emit "mapping" head(map(increment(), sample()));
 emit "label" (1 + 1);
 emit "combine" combine(add(), sample());
 
-emit "inhaleTest" inhale "hi";
+//emit "inhaleTest" inhale "hi";
 
-let num err = "this shouldn't work";
-emit "error?" err;
+//let num err = "this shouldn't work";
+
+let list[any] huh = Cons[1,2];
+emit "shouldn't work" huh;
+//emit "error?" err;

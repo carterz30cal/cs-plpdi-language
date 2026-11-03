@@ -36,6 +36,8 @@ The interpreter has some AI involvement, as I got further into the insanity of m
 
 The parser had the most involvement, as it also delves into monad use a fair bit and I'll admit I didn't have the best understanding of this section of Haskell, as well as using an entirely new library for the first time! 
 
+The preprocessor/loader was mostly AI generated, as it's not at all required for the coursework and I just thought it'd be fun.
+
 The report is entirely hand-written, and hasn't touched an AI. 
 
 ## Collaboration

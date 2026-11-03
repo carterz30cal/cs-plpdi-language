@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser (parseProgram, parseExpr) where
+module Parser (parseProgram, parseExpr, parseImports) where
 
+import qualified Data.Text.IO as TIO
 import Control.Applicative (empty, (<|>))
 import Control.Monad (void)
 import Control.Monad.Combinators.Expr
@@ -39,6 +40,11 @@ stringVal = lexeme $ char '"' *> manyTill L.charLiteral (char '"')
 stringLiteral :: Parser Expr
 stringLiteral = Literal . StringLiteral <$> stringVal
 
+file :: Parser String
+file = do
+    name <- identifier
+    symbol ".otwo"
+    pure (name ++ ".otwo")
 
 
 toSequence :: [Statement] -> Sequence
@@ -478,3 +484,17 @@ parseProgram = runParser (collect <* eof) "<input>"
 
 parseExpr :: Text -> Either (ParseErrorBundle Text Void) Expr
 parseExpr = runParser (sc *> expr <* eof) "<inhale>"
+
+
+parseImports :: Text -> Either (ParseErrorBundle Text Void) ([FilePath], Text)
+parseImports = runParser importsAndRest "<preprocessor>"
+
+importsAndRest :: Parser ([FilePath], Text)
+importsAndRest = do
+    sc
+    paths <- many (try (preImport <* optional (symbol ";")))
+    rest <- getInput
+    pure (paths, rest)
+
+preImport :: Parser FilePath
+preImport = symbol "#import" *> stringVal

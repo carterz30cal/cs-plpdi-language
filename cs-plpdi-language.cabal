@@ -59,7 +59,7 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  Interpreter, Parser, Syntax
+    exposed-modules:  Interpreter, Parser, Syntax, Loader
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -68,7 +68,12 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.20.2.0, megaparsec, parser-combinators, text
+    build-depends:    
+        base ^>=4.20.2.0,
+        megaparsec, 
+        parser-combinators, 
+        filepath,
+        text
 
     -- Directories containing source files.
     hs-source-dirs:   src
