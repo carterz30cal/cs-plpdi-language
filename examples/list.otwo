@@ -26,6 +26,12 @@ list[any] function append x Empty[] = Cons[x, Empty[]];
 list[any] function append x Cons[y,ys] = Cons[y, append(x,ys)];
 list[any] function prepend x Empty[] = Cons[x, Empty[]];
 list[any] function prepend x ys = Cons[x, ys];
+list[any] function drop Empty[] _ = Empty[];
+list[any] function drop xs 0 = xs;
+list[any] function drop Cons[_,xs] n = drop(xs, n - 1); 
+list[any] function take Empty[] _ = Empty[];
+list[any] function take _ 0 = Empty[];
+list[any] function take Cons[x,xs] n = prepend(x,take(xs, n - 1));
 
 list[any] function map f xs = {
     let list[any] zs = Empty[];
@@ -39,6 +45,11 @@ list[any] function map f xs = {
         }
     } 
     return zs;
+}
+
+list[any] function range xs lb ub = {
+    let list[any] ys = drop(xs, lb);
+    return take(ys, ub - lb); 
 }
 
 /*

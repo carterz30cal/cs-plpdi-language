@@ -56,3 +56,6 @@ let dict[str,any] testdict = Dict["ex1", 3, EmptyDict[]];
 emit "lookup" find("ex1", testdict);
 
 emit "sign" sign(-9);
+
+emit "onestakelen" length(take(ones(), 7));
+emit "onesrangelen" length(range(ones(),0,7));
