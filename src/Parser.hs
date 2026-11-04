@@ -67,6 +67,8 @@ typeParser =
         Basic Str     <$ keyword "str",
         Basic Boolean <$ keyword "bool",
         Basic Any     <$ keyword "any",
+        Basic Int     <$ keyword "int",
+        Basic Float   <$ keyword "float",
         namedType
     ]
     where

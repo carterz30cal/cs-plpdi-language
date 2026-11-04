@@ -17,7 +17,7 @@ bool function empty Empty[] = true;
 bool function empty _ = false;
 num function length Empty[] = 0;
 num function length Cons[_,xs] = 1 + length(xs);
-any function at Empty[] = null; // if ever evaluated, will error.
+any function at Empty[] _ = null; // if ever evaluated, will error.
 any function at Cons[x,_] 0 = x;
 any function at Cons[_,xs] n = at(xs, n - 1);
 
@@ -28,13 +28,17 @@ list[any] function prepend x Empty[] = Cons[x, Empty[]];
 list[any] function prepend x ys = Cons[x, ys];
 
 list[any] function map f xs = {
-    let list[any] ys = Empty[];
+    let list[any] zs = Empty[];
     if (xs != Empty[]) {
         for (let num i = 0, i < length(xs), i += 1) {
-            ys = append(f(at(xs,i)), ys);
+            zs = append(f(at(xs,i)), zs);
+            emit "xs" xs;
+            emit "at" at(xs);
+            emit "f" f;
+            emit "ys" head(zs);
         }
     } 
-    return ys;
+    return zs;
 }
 
 /*
@@ -45,5 +49,5 @@ not be called on a list with a single element.
 any function reduce f Empty[] = null;
 any function reduce f Cons[x, Empty[]] = x;
 any function reduce f Cons[x, xs] = {
-    return f(x, combine(f, xs));
+    return f(x, reduce(f, xs));
 }

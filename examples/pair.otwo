@@ -1,0 +1,6 @@
+type pair any any = Pair(any,any);
+
+any function first Pair[x,_] = x;
+any function second Pair[_,x] = x;
+
+Pair[any, any] function swap Pair[x,y] = Pair[y,x];

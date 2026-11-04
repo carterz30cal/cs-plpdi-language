@@ -1,0 +1,19 @@
+bool function positive x = x > 0;
+bool function negative x = x < 0;
+bool function zero x = x == 0;
+
+int function sign x = {
+    let int r;
+    if (positive(x)) {
+        r = 1;
+    }
+    else {
+        if (negative(x)) {
+            r = -1;
+        }
+        else {
+            r = 0;
+        }
+    } 
+    return r;
+}

@@ -1,5 +1,6 @@
 #import "examples/list.otwo"
 #import "examples/dict.otwo"
+#import "examples/number.otwo"
 
 num function fibonacci 0 = 0;
 num function fibonacci 1 = 1;
@@ -53,3 +54,5 @@ emit "shouldn't work" huh;
 
 let dict[str,any] testdict = Dict["ex1", 3, EmptyDict[]]; 
 emit "lookup" find("ex1", testdict);
+
+emit "sign" sign(-9);
