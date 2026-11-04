@@ -101,7 +101,7 @@ data Sequence = Seq Statement Sequence | End
 
 
 data Context = Context
-    { variables :: [(String, (Type, Expr))]
+    { variables :: [[(String, (Type, Expr))]]
     , immutables :: [(String, (Type, Expr))]
     , functions :: [(String, (Type, [([Pattern], FunctionBody)]))]
     , constructors :: [(String, Constructor)]

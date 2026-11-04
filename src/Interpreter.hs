@@ -80,10 +80,11 @@ guess context (Call name _) = case lookup name (functions context) of
     Nothing -> Basic Any
 -- figure this out properly later
 guess context (Construct name _) = 
-    case [ typeName
+    case
+        [ typeName
         | (typeName, cons) <- types context
-        , Con name _ <- cons
-        , name == name
+        , Con declaredName _ <- cons
+        , declaredName == name
         ] of
         typeName : _ -> Defined typeName []
         []            -> Basic Any
@@ -98,11 +99,34 @@ freeze _ Empty = Empty
 freeze _ inh@(Inhale input) = inh
 freeze context expr = Node expr context
 
+lookupInScopes :: String -> [[(String, (Type, Expr))]] -> Maybe (Type, Expr)
+lookupInScopes _ [] = Nothing
+lookupInScopes name (inner:outers) = 
+    case lookup name inner of
+        Just binding -> Just binding
+        Nothing -> lookupInScopes name outers
+
+scope :: Context -> Context
+scope context = context {variables = [] : variables context}
+
+descope :: Context -> Context
+descope context = context {
+    variables = case variables context of
+        [] -> []
+        _:outers -> outers
+}
+
+
 variable :: String -> Context -> Maybe (Type, Expr)
 variable name context =
-    case lookup name (variables context) of
-        Just (t, expr) -> Just (t, expr)
+    case lookupInScopes name (variables context) of
+        Just binding -> Just binding
         Nothing -> lookup name (immutables context)
+
+executeScope :: Sequence -> Context -> IO Context
+executeScope statements context = do
+    after <- execute statements (scope context)
+    pure (descope after)
 
 add :: Result -> Result -> Maybe Result
 add (ResultLiteral left) (ResultLiteral right) = do
@@ -428,13 +452,10 @@ evaluate :: Expr -> Context -> IO (Maybe Result)
 evaluate Empty _ = pure Nothing
 evaluate (Literal lit) _ = pure (Just (ResultLiteral lit))
 evaluate (Arithmetic op) context = arithmetic op context
-evaluate (Variable name) context =
-    case lookup name (variables context) of
+evaluate (Variable name) context = do
+    case variable name context of
         Just (t, expr) -> evaluate expr context
-        Nothing   -> do 
-            case lookup name (immutables context) of
-                Just (t, expr) -> evaluate expr context
-                Nothing -> pure Nothing
+        Nothing -> pure Nothing
 evaluate (Truth op) context = truth op context
 evaluate (Node expr c) _ = evaluate expr c
 evaluate (Inhale label) context = 
@@ -490,18 +511,21 @@ evaluate (Construct name fields) context =
 evaluate _ _ = undefined
 
 
-remove :: String -> Context -> Context
-remove name context = context { variables = filter (\(n, _) -> n /= name) (variables context) }
-
 update :: String -> (Type, Expr) -> Context -> Context
 update name (t, expr) context =
     context { variables = go (variables context) }
   where
     storedExpr = Node expr context
+
     go [] = []
-    go ((key, oldValue) : rest)
+    go (frame:frames)
+        | any ((== name) . fst) frame = replace frame : frames
+        | otherwise = frame : go frames
+
+    replace [] = []
+    replace ((key, oldValue):rest)
         | key == name = (key, (t, storedExpr)) : rest
-        | otherwise   = (key, oldValue) : go rest
+        | otherwise = (key, oldValue) : replace rest
 
 updatefunction :: String -> (Type, [([Pattern], FunctionBody)]) -> Context -> Context
 updatefunction name (t, bodies) context =
@@ -511,6 +535,18 @@ updatefunction name (t, bodies) context =
     go ((key, oldValue) : rest)
         | key == name = (key, (t, bodies)) : rest
         | otherwise   = (key, oldValue) : go rest
+
+declare :: String -> (Type, Expr) -> Context -> Context
+declare name binding context =
+    case variables context of
+        [] -> context { variables = [[(name, binding)]] }
+        frame:frames ->
+            context { variables = replace name binding frame : frames }
+  where
+    replace key value [] = [(key, value)]
+    replace key value ((name', old):rest)
+        | key == name' = (key, value) : rest
+        | otherwise    = (name', old) : replace key value rest
 
 
 execute :: Sequence -> Context -> IO Context
@@ -554,7 +590,7 @@ execute (Seq (Loop condition iterator (Seq f n)) _) context = do
     eval <- evaluate condition context
     case eval of
         Just (ResultLiteral (BooleanLiteral True)) -> do
-            context' <- execute (Seq f n) context
+            context' <- executeScope (Seq f n) context
             context'' <- execute (Seq iterator End) context'
             execute (Seq (Loop condition iterator (Seq f n)) End) context''
         Just (ResultLiteral (BooleanLiteral False)) -> return context
@@ -563,17 +599,14 @@ execute (Seq (Loop condition iterator (Seq f n)) _) context = do
             return context
 
 execute (Seq (For (VariableDec t name assignment) condition iterator body) rest) context = do
-    let newContext = context { variables = (name, (t, assignment)) : variables context }
-    context' <- execute (Seq (Loop condition iterator body) rest) newContext
-    execute rest (remove name context')
+    let context' = declare name (t, assignment) (scope context)
+    context'' <- execute (Seq (Loop condition iterator body) rest) context'
+    execute rest (descope context'')
 
 execute (Seq (Declare (VariableDec t name assignment)) rest) context = do
     let actual = guess context assignment
     if typeMatch actual t || cancast actual t
-        then do
-            let newContext =
-                    context { variables = (name, (t, assignment)) : variables context }
-            execute rest newContext
+        then execute rest (declare name (t, assignment) context)
         else do
             putStrLn $ "Type mismatch in declaration of " ++ name
                 ++ ": expected " ++ show t ++ ", got " ++ show actual
@@ -588,31 +621,26 @@ execute (Seq (Declare (TypeDec name typeVars cons)) rest) context = do
                     ,constructors = [(cn, con) | con@(Con cn _) <- cons] ++ constructors context
                 }
             execute rest newContext
-execute (Seq (If condition thenExpr elseExpr) rest) context =
-    case condition of
-        Truth truthy -> do
-            eval <- truth truthy context
-            case eval of
-                Just (ResultLiteral (BooleanLiteral True)) -> do
-                    context' <- execute thenExpr context
+execute (Seq (If condition thenExpr elseExpr) rest) context = do
+    eval <- evaluate condition context
+    case eval of
+        Just (ResultLiteral (BooleanLiteral True)) -> do
+            context' <- executeScope thenExpr context
+            execute rest context'
+        Just (ResultLiteral (BooleanLiteral False)) ->
+            case elseExpr of
+                Just elseSeq -> do
+                    context' <- executeScope elseSeq context
                     execute rest context'
-                Just (ResultLiteral (BooleanLiteral False)) ->
-                    case elseExpr of
-                        Just elseSeq -> do
-                            context' <- execute elseSeq context
-                            execute rest context'
-                        Nothing ->
-                            execute rest context
-                _ -> do
-                    putStrLn "Condition did not evaluate to a boolean"
+                Nothing ->
                     execute rest context
         _ -> do
-            putStrLn "Condition is not a truthy expression"
+            putStrLn "Condition did not evaluate to a boolean"
             execute rest context
 
 exampleContext :: Context
 exampleContext = Context
-    { variables = [("test", ((Basic Int), Literal (IntegerLiteral 3)))]
+    { variables = []
     , immutables = []
     , functions = []
     , constructors = []
