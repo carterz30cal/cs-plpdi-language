@@ -3,6 +3,8 @@ The worst possible implementation of a dictionary, with O(n) lookup time (yikes!
 */
 
 #import "maybe.otwo"
+#import "pair.otwo"
+#import "list.otwo"
 type dict k v = EmptyDict or Dict(k, v, dict[k,v]);
 
 maybe[any] function find k EmptyDict[] = Nothing[];
@@ -16,3 +18,5 @@ maybe[any] function find k Dict[key, val, ds] = {
     }
     return result;
 }
+
+dict[any, any] function fromPairs Cons[Pair[k,v], xs] = Dict[k, v, fromPairs()];
