@@ -21,13 +21,13 @@ Outputting data happens using the `emit` keyword, like this: `emit "label" (1 + 
 ## Implementation Details
 The interpreter is written in Haskell, which seemed like a natural fit given both the similar style of the language I wanted to make and also how easily it works for making ASTs. I also found Cabal very nice to work with when developing the parser!
 
-Within the interpreter implementation, we have two main types: `Expr` and `Statement`. `Expr` essentially holds all manner of expression with a resulting value, which could be a literal, a variable, a constructed type, a function call, anything really. `Statement`, on the other hand, is the traditional imperative command - it executes and returns a new `Context`, which in my language holds the variables, the immutable arguments, the types,and the constructors.
+Within the interpreter implementation, we have two main types: `Expr` and `Statement`. `Expr` essentially holds all manner of expression with a resulting value, which could be a literal, a variable, a constructed type, a function call, anything really. `Statement`, on the other hand, is the traditional imperative command - it executes and returns a new `Context`, which in my language holds the variables, the immutable arguments, the types, and the constructors.
 When combined together, `Expr` and `Statement` are all that the interpreter needs to create a manner of reasonably expressive programs. 
 
 Now the parser, which is also written in Haskell but uses a library to handle the heavy details, is what converts a `String` into a `Sequence`, which is essentially just a list of `Statement`s. This is a mostly context-free parser, which is why the syntax is a little clunky as there cannot be ambiguity within the types and my initial design decisions made constructors and functions different objects (that's the first thing i'd change in a version 2!)
 
 ## Example Code
-Please see program.lang for an implementation of several common functions used in typical functional-style programs, as well as a basic implementation of a 'generic' list (doesn't meet some criteria as the list can contain a multitude of types at once). 
+Please see program.otwo for an implementation of several common functions used in typical functional-style programs, as well as a basic implementation of a 'generic' list (doesn't meet some criteria as the list can contain a multitude of types at once). 
 
 ## AI
 This project was made with some AI usage! The syntax was written entirely by hand, with some AI assistance in discovering typos and inconsistencies. 
