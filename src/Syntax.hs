@@ -1,6 +1,6 @@
 module Syntax ( Expr(..), Literal(..), Statement(..), Sequence(..), Declaration(..)
   , Constructor(..), Pattern(..), Type(..), BaseType(..), FunctionBody(..)
-  , ArithmeticOperation(..), TruthyOperation(..), Context(..), Result(..)
+  , ArithmeticOperation(..), TruthyOperation(..), Context(..), Result(..), isEmptyExpr
   ) where
 
 data BaseType = Str | Boolean | Num | Int | Float | Any
@@ -10,7 +10,7 @@ data Type
     = Basic BaseType
     | TypeVariable String
     | Defined String [Type]
-    deriving (Show)
+    deriving (Eq, Show)
 
 data Literal
     = StringLiteral String
@@ -72,6 +72,11 @@ data Expr
     | Truth (TruthyOperation Expr)
     | Empty
     deriving (Show)
+
+isEmptyExpr :: Expr -> Bool
+isEmptyExpr Empty = True
+isEmptyExpr _ = False
+
 -- simmers expressions down into a subset of options which can be worked on
 data Result
     = ResultLiteral Literal
@@ -105,6 +110,6 @@ data Context = Context
     , immutables :: [(String, (Type, Expr))]
     , functions :: [(String, (Type, [([Pattern], FunctionBody)]))]
     , constructors :: [(String, Constructor)]
-    , types :: [(String, [Constructor])]
+    , types :: [(String, ([String], [Constructor]))]
     }
     deriving (Show)

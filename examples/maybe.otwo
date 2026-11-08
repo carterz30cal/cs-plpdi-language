@@ -1,4 +1,4 @@
-type maybe any = Nothing or Just(any);
+type maybe a = Nothing or Just(a);
 
 any function try f Nothing[] = Nothing[];
 any function try f Just[x] = {

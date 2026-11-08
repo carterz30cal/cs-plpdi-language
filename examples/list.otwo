@@ -6,7 +6,7 @@ SINCE: 1.0.0
 documentation placeholder
 */
 
-type list any = Empty or Cons(any, list[any]);
+type list a = Empty or Cons(a, list[a]);
 
 // head/tail functions
 any function head Cons[x,_] = x;
@@ -38,19 +38,12 @@ list[any] function map f xs = {
     if (xs != Empty[]) {
         for (let num i = 0, i < length(xs), i += 1) {
             zs = append(f(at(xs,i)), zs);
-            emit "xs" xs;
-            emit "at" at(xs);
-            emit "f" f;
-            emit "ys" head(zs);
         }
     } 
     return zs;
 }
 
-list[any] function range xs lb ub = {
-    let list[any] ys = drop(xs, lb);
-    return take(ys, ub - lb); 
-}
+list[any] function range xs lb ub = take(drop(xs, lb), ub - lb);
 
 /*
 the parameter f must be a partial function that can take two arguments

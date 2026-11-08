@@ -73,6 +73,7 @@ library
         megaparsec, 
         parser-combinators, 
         filepath,
+        transformers, mtl,
         text
 
     -- Directories containing source files.

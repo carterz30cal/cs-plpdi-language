@@ -1,4 +1,5 @@
 the syntax was hand-written. i used ai as a debugging tool to point out mistakes that i made that may have not been immediately obvious to myself.
-the interpreter was written using some ai assistance, as the language i've defined would take quite a while to write by hand.
+the interpreter was written using some ai assistance, as the language i've defined would take quite a while to write by hand. In particular, the type inference code was more heavy handed on the ai than the rest of the project, as I added it mostly for fun after the draft submission.
 
 the parser is a good chunk ai, again mostly due to time constraints. will recode by hand if i get the chance!
+

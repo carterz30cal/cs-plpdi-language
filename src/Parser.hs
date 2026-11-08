@@ -69,15 +69,17 @@ typeParser =
         Basic Any     <$ keyword "any",
         Basic Int     <$ keyword "int",
         Basic Float   <$ keyword "float",
-        namedType
+        try namedType,
+        typeVar
     ]
     where
+        typeVar = do 
+            name <- identifier
+            pure $ TypeVariable name
         namedType = do
             name <- identifier
-            args <- optional $ between (symbol "[") (symbol "]") (typeParser `sepBy1` symbol ",")
-            pure $ case args of 
-                Just (args') -> Defined name args'
-                Nothing -> Defined name []
+            args <- between (symbol "[") (symbol "]") (typeParser `sepBy1` symbol ",")
+            pure $ Defined name args
 
 -- apparently my method didn't work very well so here's a version that does
 chainLeft

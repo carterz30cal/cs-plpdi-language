@@ -3,7 +3,7 @@ The worst possible implementation of a dictionary, with O(n) lookup time (yikes!
 */
 
 #import "maybe.otwo"
-type dict any any = EmptyDict or Dict(any, any, dict[any,any]);
+type dict k v = EmptyDict or Dict(k, v, dict[k,v]);
 
 maybe[any] function find k EmptyDict[] = Nothing[];
 maybe[any] function find k Dict[key, val, ds] = {

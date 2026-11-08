@@ -23,7 +23,7 @@ num function fibontwo n = {
 emit "result2" fibontwo(testing);
 
 list[any] function sample = Cons[1, Cons[2, Empty[]]];
-list[num] function ones = Cons[1, ones()];
+list[int] function ones = Cons[1, ones()];
 
 emit "listtest" empty(tail(tail(sample())));
 
@@ -58,4 +58,15 @@ emit "lookup" find("ex1", testdict);
 emit "sign" sign(-9);
 
 emit "onestakelen" length(take(ones(), 7));
+emit "range?" range(ones(), 0, 7);
+emit "direct" length(take(drop(ones(), 0), 7));
+emit "firstTail" length(tail(range(ones(), 0, 7)));
 emit "onesrangelen" length(range(ones(),0,7));
+emit "rangeTailHead" head(tail(range(ones(), 0, 7)));
+
+emit "rangeTail" tail(range(ones(), 0, 7));
+emit "directTail" tail(take(drop(ones(), 0), 7));
+
+emit "headones" head(ones());
+//emit "dropLen" length(drop(ones(), 0));
+emit "takeLen" length(take(drop(ones(), 1), 7));

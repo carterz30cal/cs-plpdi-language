@@ -11,7 +11,11 @@ import Text.Megaparsec (errorBundlePretty)
 import System.IO (hFlush, stdout)
 import System.IO.Unsafe (unsafePerformIO)
 import qualified Data.Text as Txt
+import Data.Maybe (isJust)
 import qualified Parser (parseExpr)
+import Control.Monad (foldM)
+import Control.Monad.State.Strict
+import Control.Monad.Trans.Class (lift)
 
 equality :: Maybe Result -> Maybe Result -> Context -> IO Bool
 equality (Just (ResultLiteral l1)) (Just (ResultLiteral l2)) _ = pure (l1 == l2)
@@ -30,13 +34,139 @@ equality Nothing Nothing _ = pure True
 equality _ _ _ = pure False
 
 
+type Substitution = [(String, Type)]
+
+substitute :: Substitution -> Type -> Type
+substitute sub t@(TypeVariable name) = 
+    maybe t (substitute sub) (lookup name sub)
+
+substitute sub (Defined name args) =
+    Defined name (map (substitute sub) args)
+
+substitute _ t@(Basic _) = t
+
+unification :: Substitution -> Type -> Type -> Maybe Substitution
+unification sub expected actual = 
+    case (substitute sub expected, substitute sub actual) of
+        (Basic Any, _) -> Just sub -- ignore, expects anything so will accept anything
+        (_, Basic Any) -> Just sub -- hasn't been bound to anything and so we must accept
+
+        (TypeVariable name, t) -> bind name t
+        (t, TypeVariable name) -> bind name t
+
+        (Basic exp, Basic act)
+            | typeMatch (Basic act) (Basic exp) -> Just sub
+            | otherwise -> Nothing
+        -- basically, if the actual can be cast to the expected, we're happy, otherwise, we're unhappy.
+        
+        (Defined n xs, Defined m ys) 
+            | n == m && length xs == length ys ->
+                foldM (uncurry . unification) sub (zip xs ys)
+            -- attempt to unify sub-constructors
+        
+        _ -> Nothing
+    where
+        bind name t 
+            | t == TypeVariable name = Just sub
+            | occurs name t = Nothing
+            | otherwise = Just ((name, t) : sub)
+
+        occurs name (TypeVariable other) = name == other
+        occurs name (Defined _ args) = any (occurs name) args
+        occurs _ (Basic _) = False
+        
+unifyFields :: [Type] -> [Type] -> Maybe Substitution
+unifyFields expected actual
+    | length expected /= length actual = Nothing
+    | otherwise =
+        foldM
+            (\subst (e, a) -> unification subst e a)
+            []
+            (zip expected actual)
+
+
+type InferM = StateT Int Maybe
+
+freshen :: Int -> [String] -> [(String, Type)]
+freshen n params =
+    [ (param, TypeVariable ("$" ++ show n ++ ":" ++ param))
+    | param <- params
+    ]
+
+inferType :: Context -> Expr -> InferM Type
+inferType context (Literal lit) =
+    pure (ltype lit)
+
+inferType context (Call name _) = 
+    case lookup name (functions context) of
+        Just (returnType, _) -> pure returnType
+        Nothing -> lift Nothing
+
+inferType context (Variable name) =
+    case variable name context of
+        Just (t, _) -> pure t
+        Nothing     -> lift Nothing
+
+inferType context (Arithmetic (ArithmeticValue expr)) =
+    inferType context expr
+
+inferType _ (Arithmetic _) =
+    pure (Basic Num)
+
+inferType _ (Truth _) =
+    pure (Basic Boolean)
+
+inferType context (Node expr capturedContext) =
+    inferType capturedContext expr
+
+inferType context (Construct constructorName fields) = do
+    (owner, params, fieldTypes) <-
+        case
+            [ (typeName, typeParams, argTypes)
+            | (typeName, (typeParams, constructors)) <- types context
+            , Con name argTypes <- constructors
+            , name == constructorName
+            ] of
+            found:_ -> pure found
+            []      -> lift Nothing
+
+    serial <- get
+    put (serial + 1)
+
+    let freshParams = freshen serial params
+        instantiatedFields = map (substitute freshParams) fieldTypes
+        resultType =
+            Defined owner [substitute freshParams (TypeVariable p) | p <- params]
+
+    actualTypes <- mapM (inferType context) fields
+
+    subst <- foldM
+        (\s (expected, actual) ->
+            maybe (lift Nothing) pure (unification s expected actual))
+        []
+        (zip instantiatedFields actualTypes)
+
+    pure (substitute subst resultType)
+
+
+
+inferType _ _ =
+    lift Nothing
+
+inferTypeOf :: Context -> Expr -> Maybe Type
+inferTypeOf context expr =
+    evalStateT (inferType context expr) 0
+
 typeMatch :: Type -> Type -> Bool
 typeMatch (Basic Any) _ = True
 typeMatch _ (Basic Any) = True
 typeMatch (Basic Int)   (Basic Num) = True
 typeMatch (Basic Float) (Basic Num) = True
 typeMatch (Basic b1) (Basic b2) = b1 == b2
-typeMatch (Defined n1 _) (Defined n2 _) = n1 == n2
+typeMatch (Defined n1 xs) (Defined n2 ys) =
+    n1 == n2
+    && length xs == length ys
+    && and (zipWith typeMatch xs ys)
 typeMatch _ _ = False
 
 rtype :: Result -> Context -> Type
@@ -79,21 +209,24 @@ guess context (Call name _) = case lookup name (functions context) of
     Just (t, _) -> t
     Nothing -> Basic Any
 -- figure this out properly later
-guess context (Construct name _) = 
+guess context (Construct constructorName _) =
     case
-        [ typeName
-        | (typeName, cons) <- types context
+        [ (typeName, typeVars)
+        | (typeName, (typeVars, cons)) <- types context
         , Con declaredName _ <- cons
-        , declaredName == name
+        , declaredName == constructorName
         ] of
-        typeName : _ -> Defined typeName []
-        []            -> Basic Any
+        (typeName, typeVars) : _ ->
+            Defined typeName (map TypeVariable typeVars)
+        [] ->
+            Basic Any
 guess context (Arithmetic (ArithmeticValue v)) = guess context v
 guess _ (Arithmetic _) = Basic Num
 guess _ (Truth _) = Basic Boolean
 guess _ _ = Basic Any
 
 freeze :: Context -> Expr -> Expr
+freeze _ node@(Node _ _) = node
 freeze _ lit@(Literal l) = lit
 freeze _ Empty = Empty
 freeze _ inh@(Inhale input) = inh
@@ -119,9 +252,9 @@ descope context = context {
 
 variable :: String -> Context -> Maybe (Type, Expr)
 variable name context =
-    case lookupInScopes name (variables context) of
+    case lookup name (immutables context) of
         Just binding -> Just binding
-        Nothing -> lookup name (immutables context)
+        Nothing      -> lookupInScopes name (variables context)
 
 executeScope :: Sequence -> Context -> IO Context
 executeScope statements context = do
@@ -360,7 +493,7 @@ matchPattern
 matchPattern _ Wildcard _ = pure (Just [])
 
 matchPattern context (Binding name) expr =
-    pure (Just [(name, (guess context expr, Node expr context))])
+    pure (Just [(name, (guess context expr, freeze context expr))])
 
 matchPattern context (LiteralPattern expected) expr = do
     eval <- evaluate expr context
@@ -425,7 +558,8 @@ invoke name args context = do
     case select of 
         Nothing -> pure Nothing
         Just (FunctionBody _ statements rexpr, callContext) -> do
-            fcontext <- execute statements callContext
+            let context' = scope callContext
+            fcontext <- execute statements context'
             evaluate rexpr fcontext
 
 partial :: Maybe Result -> [Expr] -> Context -> IO (Maybe Result)
@@ -484,26 +618,31 @@ evaluate (Call name args) context =
                 invoke name args context
 
 -- doesn't actually evaluate anything, it just type checks with best guess!
-evaluate (Construct name fields) context =
+evaluate expr@(Construct name fields) context =
     case lookup name (constructors context) of
-        Nothing ->
-            pure Nothing
+        Nothing -> pure Nothing
         Just (Con _ expectedTypes)
             | length expectedTypes /= length fields ->
                 reportMismatch expectedTypes
-            | and (zipWith typeMatch expectedTypes actualTypes) ->
-                let capturedFields = map (`Node` context) fields
-                in pure (Just (ResultConstruct name capturedFields))
             | otherwise ->
-                reportMismatch expectedTypes
+                case inferTypeOf context expr of
+                    Just _ ->
+                        let capturedFields = map (`Node` context) fields
+                        in pure (Just (ResultConstruct name capturedFields))
+                    Nothing -> do
+                        putStrLn $ "field unification: "
+                            ++ show (unifyFields expectedTypes actualTypes)
+                        putStrLn $ "constructor inference: "
+                            ++ show (inferTypeOf context expr)
+                        reportMismatch expectedTypes
   where
     actualTypes = map (guess context) fields
+
     reportMismatch expectedTypes = do
         putStrLn $ unlines
             [ "Type mismatch in constructor: " ++ name
             , "  expected: " ++ show expectedTypes
             , "  inferred: " ++ show actualTypes
-            , "  matches:  " ++ show (zipWith typeMatch expectedTypes actualTypes)
             ]
         pure Nothing
 
@@ -603,21 +742,26 @@ execute (Seq (For (VariableDec t name assignment) condition iterator body) rest)
     context'' <- execute (Seq (Loop condition iterator body) rest) context'
     execute rest (descope context'')
 
-execute (Seq (Declare (VariableDec t name assignment)) rest) context = do
-    let actual = guess context assignment
-    if typeMatch actual t || cancast actual t
-        then execute rest (declare name (t, assignment) context)
-        else do
-            putStrLn $ "Type mismatch in declaration of " ++ name
-                ++ ": expected " ++ show t ++ ", got " ++ show actual
-            execute rest context
+execute (Seq (Declare (VariableDec t name assignment)) rest) context
+    | isEmptyExpr assignment =
+        execute rest (declare name (t, Empty) context)
+    | otherwise = do
+        case inferTypeOf context assignment of
+            Just actual
+                | isJust (unification [] t actual) ->
+                    execute rest (declare name (t, assignment) context)
+            actual -> do
+                putStrLn $ "Type mismatch in declaration of " ++ name
+                    ++ ": expected " ++ show t
+                    ++ ", inferred " ++ show actual
+                execute rest context
 execute (Seq (Declare (TypeDec name typeVars cons)) rest) context = do
     case lookup name (types context) of
         Just _ -> do
             putStrLn $ "Type " ++ name ++ " already declared"
             execute rest context
         Nothing -> do
-            let newContext = context { types = (name, cons) : types context
+            let newContext = context { types = (name, (typeVars, cons)) : types context
                     ,constructors = [(cn, con) | con@(Con cn _) <- cons] ++ constructors context
                 }
             execute rest newContext
