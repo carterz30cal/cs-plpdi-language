@@ -15,6 +15,55 @@ Variables are statically typed, but you can approximate dynamic typing by just a
 There is no built-in error handling, beyond type mismatch and emission failure, which barely qualifies in my opinion. This makes debugging rather difficult!
 
 ## Syntax
+The language writes like a blend between functional and imperative languages. Most programs would begin as a list of type definitions and functions definitions, and then a series of imperative statements that utilise those definitions and any imported definitions. 
+
+Statements are semi-colon separated and whitespace-agnostic, functions are called (or partially called) using round brackets and constructors can be utilised using square brackets. Calling a function creates a new variable scope within the global `Context` object, which allows for local variable use without leakage or affecting the outer scopes. It also passes in the parameters of the function as immutables, which are pattern matched to allow for some nice Haskell-style functions whilst keeping them immutable to ensure the purity of the functions. The `Context` also stores function definitions, types and type constructors - which allow for the instantiation of types. To ensure correctness whilst keeping the evaluation lazy, the expression creation 'freezes' the context of non-literal lazy expressions when necessary, which ensures that lazy expressions will evaluate correctly when reliant on variables that may change later on. This does consume a fair amount of memory, but optimisation is not in the scope of the project and it's a workable solution to the problem. 
+
+```inhale
+// a simple fibonacci implementation
+num function fibonacci 0 = 0;
+num function fibonacci 1 = 1;
+num function fibonacci n = fibonacci (n - 2) + fibonacci (n - 1);
+
+// you could then call it and double it
+let num result = fibonacci(8) * 2;
+// which could then be output to the console
+emit "fibonacci result" result;
+```
+
+As you can see, comments are done in C-style, so double slash for a single line comment. Multi-line comments are also supported, using classic /* */ syntax.
+
+Variables and functions must be given typing, which can be one of the language's base types (`any`, `num`, `str`, `bool`, `int`, or `float`), or may be a user-defined type, constructed using the following syntax:
+
+```inhale
+// this is the definition for a generic list type. In this instance, a is an unbound type variable (so it can take any type passed in). 
+// it does require all elements within the list to be of type a, so the list cannot contain nums and strings at the same time.
+type list a = Empty or Cons(a, list[a]);
+// a mix-match list could be constructed like so:
+type mmlist any = MMEmpty or MMCons(any, mmlist[any]);
+
+// due to lazy-evaluation, we can then create the infinite list of 1s like so
+list[int] function ones = Cons[1, ones()];
+// this will work perfectly fine for any function as long as it doesn't try and evaluate the whole list.
+```
+
+This shows that we can write programs in a functional style, but functions may also be formed in an imperative style as well, which may be more useful in some cases.
+```inhale
+num function fibontwo n = {
+    let num r;
+    if (n == 0) {r = 0;}
+    else {
+        if (n == 1) {r = 1;}
+        else {
+            r = fibontwo(n - 2) + fibontwo(n - 1);
+        }
+    }
+    return r;
+}
+// the main constraint here is the return *must* be the last line of the function, which normally requires the use of a local result variable
+// some may argue that this is the correct way to write a function anyway, but personally I think early-exit is fine in most cases
+```
+
 A complete description of the language's syntax may be found in the file syntax.txt, but in general statements are semicolon-separated, functions are called using round brackets and constructors are formed using square brackets.
 Local variables are defined using the `let` keyword and a type, whereas functions use the keyword `function` instead, with the return type stated before the keyword. 
 Outputting data happens using the `emit` keyword, like this: `emit "label" (1 + 1);`. This may output literals, constructed types and partial functions.
@@ -30,7 +79,8 @@ When combined together, `Expr` and `Statement` are all that the interpreter need
 Now the parser, which is also written in Haskell but uses a library to handle the heavy details, is what converts a `String` into a `Sequence`, which is essentially just a list of `Statement`s. This is a mostly context-free parser, which is why the syntax is a little clunky as there cannot be ambiguity within the types and my initial design decisions made constructors and functions different objects (that's the first thing i'd change in a version 2!)
 
 ## Example Code
-Please see program.otwo for an implementation of several common functions used in typical functional-style programs, as well as a basic implementation of a 'generic' list (doesn't meet some criteria as the list can contain a multitude of types at once). 
+Please see `list.otwo`, `maybe.otwo`, and `program.otwo` for a basic implementation of several common functions, a generic list type, and a generic maybe type.
+Also included are rough examples of a dictionary type, a pair type and a few basic maths functions; but these are limited mostly to trivial implementations.
 
 ## AI
 This project was made with some AI usage! The syntax was written entirely by hand, with some AI assistance in discovering typos and inconsistencies. 

@@ -39,10 +39,10 @@ definitions inside the for brackets count as within the inner bracketed scope fo
 <REPETITION> ::= for (<DEFINITION>, <TRUTH>, <EXPRESSION>) {<EXPRESSION>}
 
 <CONDITION> ::= if (<TRUTH>) {<EXPRESSION>} | if (<TRUTH>) {<EXPRESSION>} else {<EXPRESSION>} | if (<TRUTH>) {<EXPRESSION>} else <CONDITION>
-io is non-blocking, inhale will get the last value given to the program. breaks the immutability but i think it's fine
-correction! inhale is blocking in the current implementation!
-this means io is an unsafe operation and can break determinism if not careful
-emit returns nothing (undefined behaviour if read)
+
+inhale is a blocking expression that asks for an expression as input through the console, this is insecure but works.
+emit is a statement and cannot be evaluated as an expression
+
 <IO> ::= emit <STR> <EXPRESSIBLE>
 empty expression can be treated as pass
 assignment 
